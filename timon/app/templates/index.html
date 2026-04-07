@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>timon - local bioinformatics analysis</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style/bootstrap-5.3.3-dist/css/bootstrap.css') }}">
+    
+    <style>
+        :root {
+            --primary-blue: #0d6efd;
+            --bg-light: #f8f9fa;
+        }
+
+        body {
+            background-color: var(--bg-light);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        /* 1. Workflow Card Styling */
+        .pipeline-card { 
+            cursor: pointer; 
+            transition: all 0.3s cubic-bezier(.25,.8,.25,1); 
+            border: 2px solid transparent;
+            border-radius: 12px;
+            background: #fff;
+        }
+
+        .pipeline-card:hover { 
+            transform: translateY(-8px); 
+            box-shadow: 0 12px 24px rgba(0,0,0,0.08) !important; 
+            border-color: #dee2e6;
+        }
+
+        .selected-pipe { 
+            border-color: var(--primary-blue) !important; 
+            background-color: #f0f7ff; 
+            box-shadow: 0 5px 15px rgba(13, 110, 253, 0.1) !important;
+        }
+
+        /* Icon Container */
+        .icon-wrapper {
+            width: 80px;
+            height: 80px;
+            background-color: #fff;
+            border: 1px solid #eee;
+            transition: all 0.3s ease;
+        }
+
+        .selected-pipe .icon-wrapper {
+            transform: scale(1.1);
+            border-color: var(--primary-blue) !important;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+
+        /* 2. Terminal Styling */
+        #terminal { 
+            height: 350px; 
+            overflow-y: auto; 
+            background: #1e1e1e; 
+            color: #0dcaf0; 
+            font-family: 'Cascadia Code', 'Courier New', monospace; 
+            padding: 20px; 
+            border-radius: 8px;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            border: 1px solid #333;
+        }
+
+        /* 3. General UI refinements */
+        .section-title {
+            letter-spacing: 1px;
+            color: #495057;
+        }
+
+        .form-control:focus {
+            box-shadow: none;
+            border-color: var(--primary-blue);
+        }
+
+        .remove-row {
+            font-size: 1.2rem;
+            text-decoration: none;
+            line-height: 1;
+        }
+        /* Style du Header / Logo */
+        /* 1. Reduce padding on the nav container */
+        .navbar {
+            border-bottom: 1px solid #dee2e6;
+            background-color: #fff !important;
+            padding-top: 0.25rem;    /* Default is usually 0.5rem */
+            padding-bottom: 0.25rem;
+        }
+
+        /* 2. Shrink the logo and remove bottom margin */
+        .brand-logo {
+            height: 100px;           /* Reduced from 200px to a standard nav height */
+            width: auto;
+            margin-right: 10px;
+            margin-bottom: 0;       /* Ensure no bottom spacing */
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+        }
+
+        /* 3. Tighten the brand text alignment */
+        .navbar-brand {
+            font-weight: 800;
+            letter-spacing: -1.5px;
+            font-size: 1.4rem;      /* Slightly smaller font */
+            display: flex;
+            align-items: center;
+            line-height: 1;         /* Forces text to stay tight to the logo */
+            padding-top: 0;
+            padding-bottom: 0;
+            margin-right: 0;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light sticky-top shadow-sm mb-2">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <img src="{{ url_for('static', filename='img/wheel1.png') }}" alt="Logo" class="brand-logo">
+                <span class="brand-text section-title">timon</span>
+            </a>
+        </div>
+    </nav>
+
+    <div class="container py-4">
+    
+    <div class="row g-4 mb-5">
+        <div class="col-12">
+            <h4 class="section-title fw-bold text-uppercase mb-1">1. Select Workflow</h4>
+        </div>
+
+        {% for pid, p in pipelines.items() %}
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <div class="card h-100 pipeline-card shadow-sm {{ 'selected-pipe' if exp_config.current_pipeline == pid }}" 
+                 onclick="selectPipe('{{ pid }}')">
+                <div class="card-body d-flex flex-column text-center p-4">
+                    <div class="icon-wrapper mx-auto d-flex align-items-center justify-content-center rounded-circle mb-3 overflow-hidden">
+                        {% if p.icon.endswith('.png') or p.icon.endswith('.svg') %}
+                            <img src="{{ url_for('static', filename=p.icon) }}" 
+                                alt="{{ p.name }}" 
+                                style="width: 100%; height: 100%; object-fit: cover;">
+                        {% else %}
+                            <span style="font-size: 2rem;">{{ p.icon }}</span>
+                        {% endif %}
+                    </div>
+                    
+                    <h5 class="card-title fw-bold mb-2">{{ p.name }}</h5>
+                    <p class="card-text text-muted small flex-grow-1">
+                        {{ p.description }}
+                    </p>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <form id="pipe-form" action="/set_pipeline" method="POST" style="display:none;">
+        <input type="hidden" name="pipeline_select" id="pipe-input">
+    </form>
+
+    <div class="row">
+        <div class="col-lg-12 mb-4">
+            <div class="card shadow-sm border-0">
+                <h5 class="card-header bg-white fw-bold py-3 section-title">2. RUN CONFIGURATION</h5>
+                <div class="card-body p-4">
+                    <form action="/get_run_info_base" method="POST">
+                        <div class="row align-items-end">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold small text-uppercase">Run Identifier</label>
+                                <input type="text" name="exp-id" class="form-control" placeholder="e.g., Project_Alpha_2026" value="{{ exp_config.exp_id }}" required>
+                            </div>
+                            <div class="col-md-6 mb-3 text-end">
+                                <button type="submit" class="btn btn-primary px-4">Save Configuration</button>
+                            </div>
+                        </div>
+
+                        {% if active_pipe.params %}
+                        <hr class="my-4 text-muted">
+                        <div class="row">
+                            {% for param in active_pipe.params %}
+                            <div class="col-md-4 col-sm-6 mb-3">
+                                <label class="form-label small fw-semibold text-secondary">{{ param.label }}</label>
+                                {% if param.type == 'bool' %}
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" name="{{ param.id }}" {{ 'checked' if exp_config.params[param.id] }}>
+                                    <span class="small text-muted">Enabled</span>
+                                </div>
+                                {% else %}
+                                <input type="{{ param.type }}" name="{{ param.id }}" class="form-control form-control-sm" value="{{ exp_config.params[param.id] }}">
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-12 mb-4">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                    <h5 class="mb-0 fw-bold section-title">3. SAMPLE SHEET</h5>
+                    <div class="btn-group">
+                        <a href="/refresh_sample_sheet" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-folder2-open"></i> Scan folder
+                        </a>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="add-row">
+                            <i class="bi bi-plus-lg"></i> Add sample
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-4">
+                    <form action="/update_samples" method="POST">
+                        <div class="table-responsive" style="max-height: 400px;">
+                            <table class="table table-hover table-sm align-middle" id="sample-table">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        {% for col in active_pipe.columns %}
+                                        <th class="small text-uppercase text-secondary py-3">{{ col }}</th>
+                                        {% endfor %}
+                                        <th style="width: 50px;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in table_rows %}
+                                    <tr>
+                                        {% for col in active_pipe.columns %}
+                                        <td><input name="{{ col }}" class="form-control form-control-sm border-0 bg-transparent" value="{{ row[col] }}"></td>
+                                        {% endfor %}
+                                        <td class="text-center">
+                                            <button type="button" class="btn btn-link text-danger remove-row p-0">×</button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="mt-4 pt-3 border-top d-flex justify-content-between align-items-center">
+                            <span class="small text-muted">{{ table_rows|length }} samples loaded</span>
+                            <button type="submit" class="btn btn-success px-4">Save Sample Sheet</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-12">
+            <div class="card shadow-sm border-0 bg-dark">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="text-white mb-0 fw-bold">4. EXECUTION TERMINAL</h5>
+                        <button id="run-btn" class="btn btn-success px-5 fw-bold" 
+                                {{ 'disabled' if not exp_config.exp_id or not exp_config.samplesheet }}>
+                            START ANALYSIS
+                        </button>
+                    </div>
+                    <div id="terminal">Waiting for launch...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/jquery-3.6.0.js') }}"></script>
+<script src="{{ url_for('static', filename='js/socket.io.js') }}"></script>
+
+<script>
+    const socket = io();
+    const activeCols = {{ active_pipe.columns | tojson }};
+
+    // Pipeline selection logic
+    function selectPipe(id) {
+        $('#pipe-input').val(id);
+        $('#pipe-form').submit();
+    }
+
+    // Dynamic row addition
+    $('#add-row').click(function() {
+        let html = '<tr>';
+        activeCols.forEach(c => {
+            html += `<td><input name="${c}" class="form-control form-control-sm border-0 bg-transparent"></td>`;
+        });
+        html += '<td class="text-center"><button type="button" class="btn btn-link text-danger remove-row p-0">×</button></td></tr>';
+        $('#sample-table tbody').append(html);
+    });
+
+    // Row removal logic
+    $(document).on('click', '.remove-row', function() { 
+        $(this).closest('tr').fadeOut(200, function() { $(this).remove(); });
+    });
+
+    // Run Workflow logic
+    $('#run-btn').click(function() {
+        $('#terminal').empty().append('<span class="text-warning">Initializing Nextflow...</span>\n');
+        socket.emit('run_workflow');
+        $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span> Running...');
+    });
+
+    // Socket listeners
+    socket.on('workflow_output', function(msg) {
+        const term = $('#terminal');
+        term.append(msg.data);
+        term.scrollTop(term[0].scrollHeight);
+    });
+
+    socket.on('finish', function() {
+        $('#run-btn').html('Execution Finished').removeClass('btn-success').addClass('btn-secondary');
+    });
+</script>
+
+</body>
+</html>

@@ -1,2 +1,2 @@
 # timon
-Interface for microbiome data analysis
+Toolkit of Integrated MicrobiOme analysis with support for Nanopore data
