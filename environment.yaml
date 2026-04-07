@@ -1,0 +1,32 @@
+name: timon_env
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.10
+  - bwa-mem2
+  - chopper
+  - concoct
+  - coreutils
+  - coverm
+  - das_tool
+  - flye
+  - gtdbtk
+  - kraken2
+  - krakentools
+  - maxbin2
+  - medaka
+  - metabat2
+  - minimap2
+  - multiqc
+  - nanoplot
+  - nextflow
+  - porechop_abi
+  - samtools
+  - semibin
+  - pip
+  - pip:
+      - Flask==3.0.0
+      - Flask-SocketIO==5.3.5
+      - pandas==2.1.4
+      - matplotlib==3.8.2
