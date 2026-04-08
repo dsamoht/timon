@@ -2,6 +2,8 @@ import os
 import re
 from collections import defaultdict
 from .config import Config
+from os.path import commonprefix
+
 
 def input_validation(name):
     """Checks if the experiment ID contains illegal characters."""
@@ -42,46 +44,54 @@ def convert_realpaths_to_wildcards(paths):
 
 def detect_samples_files():
     """
-    Recursively detect fastq files and group them by sample name.
-    Returns a dictionary of {sample_name: path_string (or wildcard)}.
+    Detects fastq files up to 2 levels deep. 
+    Uses folder context for 'barcode*' directories and 
+    common prefix grouping for others.
     """
     if not os.path.exists(Config.IMPORT_FOLDER):
         return {}
+    
 
+    root_base = os.path.abspath(Config.IMPORT_FOLDER)
+    base_level = root_base.count(os.sep)
     fastq_pattern = re.compile(r'\.f(ast)?q(\.gz)?$', re.IGNORECASE)
-
-    # Patterns for obvious technical split suffixes
-    split_patterns = [
-        re.compile(r'(_part\d+)$', re.IGNORECASE),
-        re.compile(r'(_run\d+)$', re.IGNORECASE),
-        re.compile(r'(_rep\d+)$', re.IGNORECASE),
-        re.compile(r'(_bf[a-z0-9]+_[a-z0-9]+_\d+)$', re.IGNORECASE),  # Nanopore-like
-        re.compile(r'(_[Rr]?[12])$'),  # Illumina _R1/_R2 etc.
-        re.compile(r'(?<=\D)_(\d+)$'),  # trailing _1, _2 after non-digit prefix
-    ]
-
+    
+    chunk_suffix_pattern = re.compile(r'([._-](part\d+|\d+|[Rr][12]))$', re.IGNORECASE)
+    
     samples_map = defaultdict(list)
 
-    for root, _, files in os.walk(Config.IMPORT_FOLDER):
-        for f in files:
-            if not fastq_pattern.search(f):
-                continue
+    for root, dirs, files in os.walk(root_base):
+        current_depth = root.count(os.sep) - base_level
+        if current_depth >= 2:
+            dirs[:] = []
+
+        current_fastq = [f for f in files if fastq_pattern.search(f)]
+        if not current_fastq:
+            continue
+
+        folder_name = os.path.basename(root)
+
+        if folder_name.lower().startswith("barcode"):
+            names_only = [fastq_pattern.sub('', f) for f in current_fastq]
+            prefix = commonprefix(names_only)
+            sample_name = re.sub(r'[._-]+$', '', prefix)
             
-            basename = re.sub(fastq_pattern, '', f)
-            cleaned = basename
-            # Apply all split suffix cleanups to guess the sample name
-            for pat in split_patterns:
-                cleaned = pat.sub('', cleaned)
-            # Remove any leftover trailing dots/underscores/hyphens
-            cleaned = re.sub(r'[\.\-_]+$', '', cleaned)
-            
-            full_path = os.path.join(root, f)
-            samples_map[cleaned].append(full_path)
-    
-    # Convert lists to wildcards or single paths
+            if len(sample_name) < 2:
+                sample_name = folder_name
+                
+            for f in current_fastq:
+                samples_map[sample_name].append(os.path.join(root, f))
+        
+        else:
+            for f in current_fastq:
+                basename = fastq_pattern.sub('', f)
+                sample_identity = chunk_suffix_pattern.sub('', basename)
+                sample_name = re.sub(r'[._-]+$', '', sample_identity)
+                samples_map[sample_name].append(os.path.join(root, f))
+
     final_files = {}
-    for s, paths in samples_map.items():
+    for sample, paths in samples_map.items():
         paths.sort()
-        final_files[s] = convert_realpaths_to_wildcards(paths)
+        final_files[sample] = convert_realpaths_to_wildcards(paths)
         
     return final_files

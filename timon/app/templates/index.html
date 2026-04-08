@@ -162,44 +162,42 @@
     </form>
 
     <div class="row">
-        <div class="col-lg-12 mb-4">
-            <div class="card shadow-sm border-0">
-                <h5 class="card-header bg-white fw-bold py-3 section-title">2. RUN CONFIGURATION</h5>
-                <div class="card-body p-4">
-                    <form action="/get_run_info_base" method="POST">
-                        <div class="row align-items-end">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label fw-bold small text-uppercase">Run Identifier</label>
-                                <input type="text" name="exp-id" class="form-control" placeholder="e.g., Project_Alpha_2026" value="{{ exp_config.exp_id }}" required>
-                            </div>
-                            <div class="col-md-6 mb-3 text-end">
-                                <button type="submit" class="btn btn-primary px-4">Save Configuration</button>
-                            </div>
-                        </div>
-
-                        {% if active_pipe.params %}
-                        <hr class="my-4 text-muted">
-                        <div class="row">
-                            {% for param in active_pipe.params %}
-                            <div class="col-md-4 col-sm-6 mb-3">
-                                <label class="form-label small fw-semibold text-secondary">{{ param.label }}</label>
-                                {% if param.type == 'bool' %}
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" name="{{ param.id }}" {{ 'checked' if exp_config.params[param.id] }}>
-                                    <span class="small text-muted">Enabled</span>
-                                </div>
-                                {% else %}
-                                <input type="{{ param.type }}" name="{{ param.id }}" class="form-control form-control-sm" value="{{ exp_config.params[param.id] }}">
-                                {% endif %}
-                            </div>
-                            {% endfor %}
-                        </div>
-                        {% endif %}
-                    </form>
+        <div class="col-md-8 order-md-1">
+            <h4 class="section-title fw-bold text-uppercase mb-1">2. RUN CONFIGURATION</h4>
+            <form>
+                <div class="row g-3">
+                    <div class="col-sm-6">
+                        <label for="exp-id" class="form-label">Run Identifier</label>
+                        <input type="text" class="form-control" id="exp-id" placeholder="e.g., Project_Alpha_2026" required>
+                    </div>
+                    <h3 class="mb-3">Pipeline parameters</h3>
+                    {% if active_pipe.params %}
+                    {% for param in active_pipe.params %}
+                    {% if param.type == 'bool' %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="{{ param.id }}" name="{{ param.id }}" {{ 'checked' if exp_config.params[param.id] }}>
+                        <label class="form-check-label" for="{{ param.id }}"> {{ param.label }} </label>
+                    </div>
+                    {% elif param.type == 'number' %}
+                    <div class="col-sm-6">
+                        <label for="{{ param.id }}" class="form-label">{{ param.label }}</label>
+                        <input type="number" class="form-control" id="{{ param.id }}" name="{{ param.id }}" value="{{ exp_config.params[param.id] }}" min="{{ param.min }}" max="{{ param.max }}">
+                    </div>
+                    {% else %}
+                    <div class="col-sm-6">
+                        <label for="{{ param.id }}" class="form-label">{{ param.label }}</label>
+                        <input type="{{ param.type }}" class="form-control" id="{{ param.id }}" name="{{ param.id }}" value="{{ exp_config.params[param.id] }}">
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                    {% endif %}
                 </div>
-            </div>
+                <div class="col-md-6 mb-3 text-end">
+                    <button type="submit" class="btn btn-primary px-4">Save Configuration</button>
+                </div>
+            </form>
         </div>
-
+                  
         <div class="col-lg-12 mb-4">
             <div class="card shadow-sm border-0">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
