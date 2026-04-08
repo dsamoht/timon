@@ -2,8 +2,9 @@ from flask import render_template, request, redirect, url_for, flash, current_ap
 import pandas as pd
 import uuid, os
 from .core import EXP_CONFIG, SAMPLES, WF_SUBPROCESS
-from .config import PIPELINES
+from .config import Config, PIPELINES
 from .utils import detect_samples_files, input_validation
+
 
 @app.route('/')
 def index():
