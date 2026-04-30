@@ -5,3 +5,5 @@ main.py
 pyproject.toml
 README
 **/.DS_Store
+timon/data
+.DS_Store

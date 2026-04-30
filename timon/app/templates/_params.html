@@ -1,0 +1,31 @@
+{% set bools = active_pipe.params | selectattr('type', 'equalto', 'bool') | list %}
+{% set others = active_pipe.params | rejectattr('type', 'equalto', 'bool') | list %}
+
+{% for p in others %}
+<div class="field-wrap">
+    <label class="field-label" for="{{ p.id }}">{{ p.label }}</label>
+    {% if p.type == 'number' %}
+        <input type="number" class="fi" id="{{ p.id }}" name="{{ p.id }}"
+               value="{{ exp_config.params.get(p.id, p.default) }}"
+               {% if p.min is defined %}min="{{ p.min }}"{% endif %}
+               {% if p.max is defined %}max="{{ p.max }}"{% endif %}>
+    {% else %}
+        <input type="text" class="fi" id="{{ p.id }}" name="{{ p.id }}"
+               value="{{ exp_config.params.get(p.id, p.default) }}">
+    {% endif %}
+</div>
+{% endfor %}
+
+{% if bools %}
+<div class="field-wrap full">
+    <div class="check-row">
+        {% for p in bools %}
+        <label class="check-item">
+            <input type="checkbox" name="{{ p.id }}"
+                   {% if exp_config.params.get(p.id, p.default) %}checked{% endif %}>
+            {{ p.label }}
+        </label>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}

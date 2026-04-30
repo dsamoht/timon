@@ -3,312 +3,1273 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>timon - local bioinformatics analysis</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style/bootstrap-5.3.3-dist/css/bootstrap.css') }}">
-    
+    <title>timon — local microbiomics analysis</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
     <style>
+        /* ─── TOKENS ─────────────────────────────────────────────── */
         :root {
-            --primary-blue: #0d6efd;
-            --bg-light: #f8f9fa;
+            --bg:        #f0f2f6;
+            --surface:   #ffffff;
+            --surface2:  #e8ebf0;
+            --border:    #c8cdd6;
+            --border2:   #a8b0bc;
+            --text:      #0d1117;
+            --text-dim:  #374151;
+            --text-mid:  #2d3748;
+            --accent:    #2563eb;
+            --accent-dim:#bfdbfe;
+            --accent-glow:rgba(37,99,235,.07);
+            --green:     #16a34a;
+            --green-dim: #bbf7d0;
+            --amber:     #d97706;
+            --red:       #dc2626;
+            --red-dim:   #fecaca;
+            --mono: 'IBM Plex Mono', monospace;
+            --sans: 'IBM Plex Sans', sans-serif;
         }
 
-        body {
-            background-color: var(--bg-light);
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body {
+            height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--sans);
+            font-size: 15.5px;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
         }
 
-        /* 1. Workflow Card Styling */
-        .pipeline-card { 
-            cursor: pointer; 
-            transition: all 0.3s cubic-bezier(.25,.8,.25,1); 
-            border: 2px solid transparent;
-            border-radius: 12px;
-            background: #fff;
+        /* ─── SCROLLBAR ──────────────────────────────────────────── */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+        /* ─── LAYOUT ─────────────────────────────────────────────── */
+        .shell {
+            display: grid;
+            grid-template-columns: 200px 1fr;
+            grid-template-rows: 80px 1fr;
+            height: 100vh;
+            overflow: hidden;
         }
 
-        .pipeline-card:hover { 
-            transform: translateY(-8px); 
-            box-shadow: 0 12px 24px rgba(0,0,0,0.08) !important; 
-            border-color: #dee2e6;
-        }
-
-        .selected-pipe { 
-            border-color: var(--primary-blue) !important; 
-            background-color: #f0f7ff; 
-            box-shadow: 0 5px 15px rgba(13, 110, 253, 0.1) !important;
-        }
-
-        /* Icon Container */
-        .icon-wrapper {
-            width: 80px;
-            height: 80px;
-            background-color: #fff;
-            border: 1px solid #eee;
-            transition: all 0.3s ease;
-        }
-
-        .selected-pipe .icon-wrapper {
-            transform: scale(1.1);
-            border-color: var(--primary-blue) !important;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-        }
-
-        /* 2. Terminal Styling */
-        #terminal { 
-            height: 350px; 
-            overflow-y: auto; 
-            background: #1e1e1e; 
-            color: #0dcaf0; 
-            font-family: 'Cascadia Code', 'Courier New', monospace; 
-            padding: 20px; 
-            border-radius: 8px;
-            font-size: 0.85rem;
-            line-height: 1.5;
-            border: 1px solid #333;
-        }
-
-        /* 3. General UI refinements */
-        .section-title {
-            letter-spacing: 1px;
-            color: #495057;
-        }
-
-        .form-control:focus {
-            box-shadow: none;
-            border-color: var(--primary-blue);
-        }
-
-        .remove-row {
-            font-size: 1.2rem;
-            text-decoration: none;
-            line-height: 1;
-        }
-        /* Style du Header / Logo */
-        /* 1. Reduce padding on the nav container */
-        .navbar {
-            border-bottom: 1px solid #dee2e6;
-            background-color: #fff !important;
-            padding-top: 0.25rem;    /* Default is usually 0.5rem */
-            padding-bottom: 0.25rem;
-        }
-
-        /* 2. Shrink the logo and remove bottom margin */
-        .brand-logo {
-            height: 100px;           /* Reduced from 200px to a standard nav height */
-            width: auto;
-            margin-right: 10px;
-            margin-bottom: 0;       /* Ensure no bottom spacing */
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
-        }
-
-        /* 3. Tighten the brand text alignment */
-        .navbar-brand {
-            font-weight: 800;
-            letter-spacing: -1.5px;
-            font-size: 1.4rem;      /* Slightly smaller font */
+        /* ─── TOPBAR ─────────────────────────────────────────────── */
+        .topbar {
+            grid-column: 1 / -1;
             display: flex;
             align-items: center;
-            line-height: 1;         /* Forces text to stay tight to the logo */
-            padding-top: 0;
-            padding-bottom: 0;
-            margin-right: 0;
+            padding: 0 20px;
+            gap: 14px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+        }
+        
+        .brand-mark {
+            height: 72px;
+            flex-shrink: 0;
+        }
+        
+        .brand-mark img {
+            height: 100%;
+            width: auto;
+            object-fit: contain;
+        }
+
+        .brand-name {
+            font-family: var(--mono);
+            font-size: 15px;
+            font-weight: 500;
+            color: #fff;
+            letter-spacing: -0.5px;
+        }
+        .brand-name span { color: var(--accent); }
+
+        .topbar-divider {
+            width: 1px; height: 20px;
+            background: var(--border2);
+        }
+
+        .version-tag {
+            font-family: var(--mono);
+            font-size: 16px;
+            color: var(--text-dim);
+            letter-spacing: 0.5px;
+        }
+
+        .topbar-right {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .pulse-dot {
+            position: relative;
+            width: 8px; height: 8px;
+        }
+        .pulse-dot::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: var(--green);
+            animation: pulse-ring 2s ease infinite;
+        }
+        .pulse-dot::after {
+            content: '';
+            position: absolute;
+            inset: 1px;
+            border-radius: 50%;
+            background: var(--green);
+        }
+        @keyframes pulse-ring {
+            0%   { box-shadow: 0 0 0 0 rgba(34,197,94,.5); }
+            70%  { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+            100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+        }
+
+        .status-text {
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--text-dim);
+        }
+
+        #run-btn {
+            font-family: var(--mono);
+            font-size: 12px;
+            font-weight: 500;
+            padding: 7px 20px;
+            border-radius: 4px;
+            border: 1px solid var(--accent);
+            background: transparent;
+            color: var(--accent);
+            cursor: pointer;
+            letter-spacing: 0.3px;
+            transition: background 0.15s, color 0.15s;
+        }
+        #run-btn:hover:not(:disabled) {
+            background: var(--accent);
+            color: #fff;
+        }
+        #run-btn:disabled {
+            border-color: var(--border2);
+            color: var(--text-dim);
+            cursor: not-allowed;
+        }
+        #run-btn.running {
+            border-color: var(--amber);
+            color: var(--amber);
+        }
+
+        #cancel-btn {
+            display: none;
+            font-family: var(--mono);
+            font-size: 12px;
+            padding: 7px 16px;
+            border-radius: 4px;
+            border: 1px solid var(--red);
+            background: transparent;
+            color: var(--red);
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        #cancel-btn:hover { background: var(--red); color: #fff; }
+
+        /* ─── SIDEBAR ────────────────────────────────────────────── */
+        .sidebar {
+            border-right: 1px solid var(--border);
+            background: var(--surface);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 16px 0;
+        }
+
+        .sidebar-section {
+            padding: 0 12px;
+            margin-bottom: 20px;
+        }
+
+        .sidebar-label {
+            font-family: var(--mono);
+            font-size: 11px;
+            letter-spacing: 1px;
+            color: var(--text-mid);
+            text-transform: uppercase;
+            padding: 0 4px;
+            margin-bottom: 6px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 7px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #8a95a6;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: background 0.12s, color 0.12s;
+            text-decoration: none;
+        }
+        .nav-item:hover { background: var(--surface2); color: var(--text); }
+        .nav-item.active {
+            background: var(--accent-glow);
+            color: var(--accent);
+            border-color: var(--accent-dim);
+        }
+        .nav-icon { width: 14px; height: 14px; flex-shrink: 0; opacity: .7; }
+        .nav-item.active .nav-icon { opacity: 1; }
+
+        .stat-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+        }
+        .stat-label {
+            font-family: var(--mono);
+            font-size: 10px;
+            letter-spacing: 0.6px;
+            color: var(--text-mid);
+            text-transform: uppercase;
+            margin-bottom: 3px;
+        }
+        .stat-value {
+            font-family: var(--mono);
+            font-size: 22px;
+            font-weight: 500;
+            color: var(--text);
+            line-height: 1;
+        }
+        /* Green when > 0 */
+        .stat-value.has-data { color: var(--green); }
+        .stat-sub {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-top: 2px;
+        }
+
+        .pipe-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-family: var(--mono);
+            font-size: 11px;
+            color: #8a95a6;
+        }
+        .pipe-indicator {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--text-dim);
+            flex-shrink: 0;
+            transition: background 0.2s;
+        }
+        .pipe-indicator.active { background: var(--accent); }
+
+        /* ─── MAIN ───────────────────────────────────────────────── */
+        .main {
+            overflow-y: auto;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ─── SECTION ────────────────────────────────────────────── */
+        .section {
+            border-bottom: 1px solid var(--border);
+            padding: 20px 24px;
+        }
+
+        .section-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .step-num {
+            font-family: var(--mono);
+            font-size: 11px;
+            font-weight: 500;
+            width: 22px; height: 22px;
+            border-radius: 50%;
+            border: 1px solid var(--accent-dim);
+            background: var(--accent-glow);
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        /* Completed step indicator */
+        .step-num.done {
+            border-color: var(--green-dim);
+            background: #f0fdf4;
+            color: var(--green);
+        }
+
+        .section-title {
+            font-family: var(--sans);
+            font-size: 15px;
+            font-weight: 500;
+            letter-spacing: -0.2px;
+            color: var(--text);
+            text-transform: none;
+        }
+
+        .section-actions {
+            margin-left: auto;
+            display: flex;
+            gap: 6px;
+        }
+
+        /* ─── PIPELINE CARDS ─────────────────────────────────────── */
+        .pipeline-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .pipeline-card {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 14px;
+            cursor: pointer;
+            background: var(--surface);
+            transition: border-color 0.15s, background 0.15s;
+            position: relative;
+            overflow: hidden;
+        }
+        .pipeline-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--accent-glow);
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        .pipeline-card:hover { border-color: var(--border2); }
+        .pipeline-card:hover::before { opacity: 0.5; }
+        .pipeline-card.selected {
+            border-color: var(--accent);
+            background: var(--surface2);
+        }
+        .pipeline-card.selected::before { opacity: 1; }
+
+        .pipe-icon {
+            width: 68px; height: 68px;
+            border-radius: 6px;
+            border: 1px solid var(--border2);
+            background: var(--surface2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        .pipe-icon img {
+            width: 100%; height: 100%;
+            object-fit: cover;
+        }
+        .pipe-icon span { font-size: 34px; }
+
+        .pipe-name {
+            font-family: var(--mono);
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+        .pipeline-card.selected .pipe-name { color: var(--accent); }
+
+        .pipe-desc {
+            font-size: 11px;
+            color: var(--text-dim);
+            line-height: 1.5;
+        }
+
+        .pipeline-card.selected { opacity: 1; }
+
+        /* ─── FORMS ──────────────────────────────────────────────── */
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .form-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+        .field-wrap { display: flex; flex-direction: column; gap: 5px; }
+        .field-wrap.full { grid-column: 1 / -1; }
+
+        .field-label {
+            font-family: var(--mono);
+            font-size: 11px;
+            letter-spacing: 0.4px;
+            color: var(--text-mid);
+            text-transform: uppercase;
+        }
+
+        input[type="text"].fi,
+        input[type="number"].fi,
+        input[type="email"].fi {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 4px;
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: 12px;
+            padding: 7px 10px;
+            outline: none;
+            transition: border-color 0.12s;
+            width: 100%;
+        }
+        input[type="text"].fi:focus,
+        input[type="number"].fi:focus {
+            border-color: var(--accent);
+        }
+        input.fi.is-valid {
+            border-color: var(--green);
+            background: #f0fdf4;
+        }
+        input.fi.is-invalid {
+            border-color: var(--red);
+            background: #fef2f2;
+        }
+        /* Locked/saved form state */
+        .form-locked input,
+        .form-locked select {
+            background: var(--surface2) !important;
+            color: var(--text-dim) !important;
+            border-color: var(--border) !important;
+            pointer-events: none;
+            user-select: none;
+        }
+        .form-locked input[type="checkbox"] {
+            pointer-events: none;
+            opacity: 0.6;
+        }
+        .form-locked .check-item {
+            pointer-events: none;
+            opacity: 0.6;
+            cursor: default;
+        }
+        .form-locked .btn[type="submit"] { display: none; }
+
+        .field-hint {
+            font-family: var(--mono);
+            font-size: 10px;
+            margin-top: 3px;
+            display: none;
+        }
+        .field-hint.show { display: block; }
+        .field-hint.ok  { color: var(--green); }
+        .field-hint.err { color: var(--red); }
+
+        .check-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-top: 4px;
+        }
+        .check-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-family: var(--mono);
+            font-size: 11px;
+            color: #8a95a6;
+        }
+        .check-item input[type="checkbox"] {
+            accent-color: var(--accent);
+            width: 13px; height: 13px;
+        }
+
+        /* ─── VALIDATION ERRORS ──────────────────────────────────── */
+        .error-list {
+            margin-top: 12px;
+            border: 1px solid var(--red-dim);
+            border-left: 3px solid var(--red);
+            border-radius: 4px;
+            background: #fff5f5;
+            padding: 10px 14px;
+            display: none;
+        }
+        .error-list.show { display: block; }
+        .error-list-header {
+            font-family: var(--mono);
+            font-size: 10px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            color: var(--red);
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+        .error-list ul {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .error-list ul li {
+            font-family: var(--mono);
+            font-size: 11px;
+            color: #7f1d1d;
+            padding-left: 12px;
+            position: relative;
+        }
+        .error-list ul li::before {
+            content: '×';
+            position: absolute;
+            left: 0;
+            color: var(--red);
+        }
+
+        /* ─── BUTTONS ────────────────────────────────────────────── */
+        .btn {
+            font-family: var(--mono);
+            font-size: 11px;
+            padding: 6px 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid var(--border2);
+            background: transparent;
+            color: #8a95a6;
+            transition: background 0.12s, color 0.12s, border-color 0.12s;
+            white-space: nowrap;
+        }
+        .btn:hover { background: var(--surface2); color: var(--text); border-color: var(--border2); }
+        .btn-primary {
+            border-color: var(--accent-dim);
+            color: var(--accent);
+        }
+        .btn-primary:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .btn-success {
+            border-color: var(--green-dim);
+            color: var(--green);
+        }
+        .btn-success:hover { background: var(--green); color: #fff; border-color: var(--green); }
+        .btn-edit {
+            border-color: var(--amber);
+            color: var(--amber);
+            display: none;
+        }
+        .btn-edit:hover { background: var(--amber); color: #fff; }
+
+        /* ─── TABLE ──────────────────────────────────────────────── */
+        .tbl-wrap {
+            overflow-x: auto;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            margin-top: 12px;
+        }
+
+        table.samples {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: var(--mono);
+            font-size: 11px;
+        }
+        table.samples thead th {
+            text-align: left;
+            padding: 8px 12px;
+            font-size: 9px;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            white-space: nowrap;
+        }
+        table.samples tbody td {
+            padding: 4px 6px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg);
+        }
+        table.samples tbody tr:hover td { background: var(--surface); }
+        table.samples tbody tr:last-child td { border-bottom: none; }
+        table.samples tbody td input {
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: 11px;
+            width: 100%;
+            padding: 2px 4px;
+        }
+        table.samples tbody td input:focus {
+            background: var(--surface2);
+            border-radius: 2px;
+        }
+        table.samples tbody td input[type="date"] {
+            color-scheme: light;
+            cursor: pointer;
+        }
+        table.samples tbody td input:invalid {
+            box-shadow: inset 2px 0 0 var(--red);
+        }
+        /* Locked table */
+        .tbl-locked table.samples tbody td input {
+            pointer-events: none;
+            color: var(--text-dim);
+        }
+        .tbl-locked .del-btn { display: none; }
+        .tbl-locked table.samples tbody td { background: var(--surface2); }
+
+        .del-btn {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            padding: 0 4px;
+            font-family: var(--mono);
+            transition: color 0.12s;
+        }
+        .del-btn:hover { color: var(--red); }
+
+        .tbl-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+        .sample-count {
+            font-family: var(--mono);
+            font-size: 10px;
+            color: var(--text-dim);
+        }
+        .sample-count.validated {
+            color: var(--green);
+        }
+
+        /* ─── TERMINAL ───────────────────────────────────────────── */
+        .terminal {
+            background: #1a1f2b;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 16px 18px;
+            font-family: var(--mono);
+            font-size: 12px;
+            line-height: 1.8;
+            height: 260px;
+            overflow-y: auto;
+            color: #c9d5e8;
+            white-space: pre;
+        }
+        .terminal .t-blue   { color: #60a5fa; }
+        .terminal .t-green  { color: #4ade80; }
+        .terminal .t-amber  { color: #fbbf24; }
+        .terminal .t-red    { color: #f87171; }
+        .terminal .t-dim    { color: #4a5568; }
+        .terminal .t-bright { color: #e2e8f0; }
+
+        /* ─── APP LOCK ───────────────────────────────────────────── */
+        /* Lock everything... */
+        .app-locked .section,
+        .app-locked .sidebar-section:not(.always-on) {
+            pointer-events: none;
+            opacity: 0.45;
+            user-select: none;
+        }
+
+        /* ...EXCEPT the terminal section and the stop button */
+        .app-locked #cancel-btn,
+        .app-locked .section:has(.terminal) {
+            pointer-events: all;
+            opacity: 1;
+            user-select: auto;
+        }
+        /* ─── TOAST ──────────────────────────────────────────────── */
+        #toast-host {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .toast {
+            font-family: var(--mono);
+            font-size: 11px;
+            padding: 9px 16px;
+            border-radius: 4px;
+            border: 1px solid var(--border2);
+            background: var(--surface2);
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            animation: slide-in 0.2s ease;
+        }
+        .toast.ok  { border-color: var(--green-dim); color: var(--green); }
+        .toast.err { border-color: #7f1d1d; color: var(--red); }
+        @keyframes slide-in {
+            from { transform: translateX(30px); opacity: 0; }
+            to   { transform: translateX(0);    opacity: 1; }
+        }
+
+        /* ─── PARAMS SECTION ─────────────────────────────────────── */
+        #params-area {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        /* Form save row */
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 14px;
         }
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-light sticky-top shadow-sm mb-2">
-        <div class="container">
-            <a class="navbar-brand" href="#">
-                <img src="{{ url_for('static', filename='img/wheel1.png') }}" alt="Logo" class="brand-logo">
-                <span class="brand-text section-title">timon</span>
+<div class="shell">
+
+    <!-- ── TOPBAR ──────────────────────────────────────────────── -->
+    <header class="topbar">
+        <a class="brand" href="#">
+            <div class="brand-mark">
+                <img src="{{ url_for('static', filename='img/timon_logo_light.png') }}" alt="timon">
+            </div>
+        </a>
+        <div class="topbar-divider"></div>
+        <span class="version-tag">v0.1.0</span>
+
+        <div class="topbar-right">
+            <div class="pulse-dot"></div>
+            <span class="status-text">nextflow ready</span>
+            <button id="cancel-btn" onclick="cancelRun()">■ stop</button>
+            <button id="run-btn"
+                    {{ 'disabled' if not exp_config.exp_id or not exp_config.samplesheet }}>
+                ▶ run analysis
+            </button>
+        </div>
+    </header>
+
+    <!-- ── SIDEBAR ─────────────────────────────────────────────── -->
+    <aside class="sidebar">
+
+        <div class="sidebar-section">
+            <div class="sidebar-label">Navigation</div>
+            <a class="nav-item active" href="#">
+                <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                    <rect x="1" y="1" width="6" height="6" rx="1"/>
+                    <rect x="9" y="1" width="6" height="6" rx="1"/>
+                    <rect x="1" y="9" width="6" height="6" rx="1"/>
+                    <rect x="9" y="9" width="6" height="6" rx="1"/>
+                </svg>
+                configuration
+            </a>
+            <a class="nav-item" href="#">
+                <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                    <polyline points="1,11 5,5 9,8 12,4 15,7"/>
+                </svg>
+                results
             </a>
         </div>
-    </nav>
 
-    <div class="container py-4">
-    
-    <div class="row g-4 mb-5">
-        <div class="col-12">
-            <h4 class="section-title fw-bold text-uppercase mb-1">1. Select Workflow</h4>
+        <div class="sidebar-section">
+            <div class="sidebar-label">Active pipeline</div>
+            <div class="pipe-badge" id="pipe-badge">
+                <div class="pipe-indicator {{ 'active' if exp_config.current_pipeline }}" id="pipe-dot"></div>
+                <span id="pipe-label">{{ exp_config.current_pipeline or 'none' }}</span>
+            </div>
         </div>
 
-        {% for pid, p in pipelines.items() %}
-        <div class="col-xl-3 col-lg-4 col-md-6">
-            <div class="card h-100 pipeline-card shadow-sm {{ 'selected-pipe' if exp_config.current_pipeline == pid }}" 
-                 onclick="selectPipe('{{ pid }}')">
-                <div class="card-body d-flex flex-column text-center p-4">
-                    <div class="icon-wrapper mx-auto d-flex align-items-center justify-content-center rounded-circle mb-3 overflow-hidden">
-                        {% if p.icon.endswith('.png') or p.icon.endswith('.svg') %}
-                            <img src="{{ url_for('static', filename=p.icon) }}" 
-                                alt="{{ p.name }}" 
-                                style="width: 100%; height: 100%; object-fit: cover;">
-                        {% else %}
-                            <span style="font-size: 2rem;">{{ p.icon }}</span>
-                        {% endif %}
-                    </div>
-                    
-                    <h5 class="card-title fw-bold mb-2">{{ p.name }}</h5>
-                    <p class="card-text text-muted small flex-grow-1">
-                        {{ p.description }}
-                    </p>
+        <div class="sidebar-section">
+            <div class="sidebar-label">Stats</div>
+            <div class="stat-card">
+                <div class="stat-label">samples ready</div>
+                <div class="stat-value {% if table_rows|length > 0 %}has-data{% endif %}" id="stat-samples">{{ table_rows|length }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">run id</div>
+                <div class="stat-sub" id="stat-runid" style="font-family:var(--mono);font-size:11px;">
+                    {{ exp_config.exp_id or '—' }}
                 </div>
             </div>
         </div>
-        {% endfor %}
-    </div>
 
-    <form id="pipe-form" action="/set_pipeline" method="POST" style="display:none;">
-        <input type="hidden" name="pipeline_select" id="pipe-input">
-    </form>
+        <div class="sidebar-section" style="margin-top:auto;">
+            <button class="btn" style="width:100%;" onclick="resetAll()">reset all</button>
+        </div>
 
-    <div class="row">
-        <div class="col-md-8 order-md-1">
-            <h4 class="section-title fw-bold text-uppercase mb-1">2. RUN CONFIGURATION</h4>
-            <form>
-                <div class="row g-3">
-                    <div class="col-sm-6">
-                        <label for="exp-id" class="form-label">Run Identifier</label>
-                        <input type="text" class="form-control" id="exp-id" placeholder="e.g., Project_Alpha_2026" required>
+    </aside>
+
+    <!-- ── MAIN ────────────────────────────────────────────────── -->
+    <main class="main">
+
+        <!-- 1. Select workflow -->
+        <div class="section">
+            <div class="section-head">
+                <div class="step-num">1</div>
+                <span class="section-title">Select workflow</span>
+            </div>
+            <div class="pipeline-grid">
+                {% for pid, p in pipelines.items() %}
+                <div class="pipeline-card {{ 'selected' if exp_config.current_pipeline == pid }}"
+                     data-pipe-id="{{ pid }}"
+                     onclick="selectPipe('{{ pid }}')">
+                    <div class="pipe-icon">
+                        {% if p.icon.endswith('.png') or p.icon.endswith('.svg') %}
+                            <img src="{{ url_for('static', filename=p.icon) }}" alt="{{ p.name }}">
+                        {% else %}
+                            <span>{{ p.icon }}</span>
+                        {% endif %}
                     </div>
-                    <h3 class="mb-3">Pipeline parameters</h3>
-                    {% if active_pipe.params %}
-                    {% for param in active_pipe.params %}
-                    {% if param.type == 'bool' %}
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="{{ param.id }}" name="{{ param.id }}" {{ 'checked' if exp_config.params[param.id] }}>
-                        <label class="form-check-label" for="{{ param.id }}"> {{ param.label }} </label>
-                    </div>
-                    {% elif param.type == 'number' %}
-                    <div class="col-sm-6">
-                        <label for="{{ param.id }}" class="form-label">{{ param.label }}</label>
-                        <input type="number" class="form-control" id="{{ param.id }}" name="{{ param.id }}" value="{{ exp_config.params[param.id] }}" min="{{ param.min }}" max="{{ param.max }}">
-                    </div>
-                    {% else %}
-                    <div class="col-sm-6">
-                        <label for="{{ param.id }}" class="form-label">{{ param.label }}</label>
-                        <input type="{{ param.type }}" class="form-control" id="{{ param.id }}" name="{{ param.id }}" value="{{ exp_config.params[param.id] }}">
-                    </div>
-                    {% endif %}
-                    {% endfor %}
-                    {% endif %}
+                    <div class="pipe-name">{{ p.name }}</div>
+                    <div class="pipe-desc">{{ p.description }}</div>
                 </div>
-                <div class="col-md-6 mb-3 text-end">
-                    <button type="submit" class="btn btn-primary px-4">Save Configuration</button>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- 2. Run configuration -->
+        <div class="section">
+            <div class="section-head">
+                <div class="step-num" id="step2-num">2</div>
+                <span class="section-title">Run configuration</span>
+                <div class="section-actions">
+                    <button type="button" class="btn btn-edit" id="config-edit-btn"
+                            onclick="unlockForm('config-form','config-edit-btn','step2-num')">edit</button>
+                </div>
+            </div>
+            <form id="config-form">
+                <div class="form-grid">
+                    <div class="field-wrap">
+                        <label class="field-label" for="exp-id">run identifier</label>
+                        <input type="text" class="fi" id="exp-id" name="exp-id"
+                               placeholder="e.g. bloom_survey_2026"
+                               value="{{ exp_config.exp_id }}" required>
+                    </div>
+                </div>
+
+                <div style="margin-top:14px;">
+                    <div class="field-label" style="margin-bottom:10px;">pipeline parameters</div>
+                    <div id="params-area">
+                        {% include '_params.html' %}
+                    </div>
+                </div>
+
+                <!-- Config validation errors -->
+                <div class="error-list" id="config-errors">
+                    <div class="error-list-header">configuration errors</div>
+                    <ul id="config-error-list"></ul>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">save configuration</button>
                 </div>
             </form>
         </div>
-                  
-        <div class="col-lg-12 mb-4">
-            <div class="card shadow-sm border-0">
-                <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
-                    <h5 class="mb-0 fw-bold section-title">3. SAMPLE SHEET</h5>
-                    <div class="btn-group">
-                        <a href="/refresh_sample_sheet" class="btn btn-sm btn-outline-secondary">
-                            <i class="bi bi-folder2-open"></i> Scan folder
-                        </a>
-                        <button type="button" class="btn btn-sm btn-outline-primary" id="add-row">
-                            <i class="bi bi-plus-lg"></i> Add sample
-                        </button>
-                    </div>
+
+        <!-- 3. Sample sheet -->
+        <div class="section">
+            <div class="section-head">
+                <div class="step-num" id="step3-num">3</div>
+                <span class="section-title">Sample sheet</span>
+                <div class="section-actions">
+                    <button class="btn" id="scan-btn">
+                        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="vertical-align:-1px;margin-right:4px;">
+                            <path d="M2 4h12v10H2z"/><path d="M5 4V2h6v2"/>
+                        </svg>
+                        scan folder
+                    </button>
+                    <button class="btn btn-primary" id="add-row-btn">+ add row</button>
+                    <button type="button" class="btn btn-edit" id="sample-edit-btn"
+                            onclick="unlockSampleSheet()">edit</button>
                 </div>
-                <div class="card-body p-4">
-                    <form action="/update_samples" method="POST">
-                        <div class="table-responsive" style="max-height: 400px;">
-                            <table class="table table-hover table-sm align-middle" id="sample-table">
-                                <thead class="table-light sticky-top">
-                                    <tr>
-                                        {% for col in active_pipe.columns %}
-                                        <th class="small text-uppercase text-secondary py-3">{{ col }}</th>
-                                        {% endfor %}
-                                        <th style="width: 50px;"></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for row in table_rows %}
-                                    <tr>
-                                        {% for col in active_pipe.columns %}
-                                        <td><input name="{{ col }}" class="form-control form-control-sm border-0 bg-transparent" value="{{ row[col] }}"></td>
-                                        {% endfor %}
-                                        <td class="text-center">
-                                            <button type="button" class="btn btn-link text-danger remove-row p-0">×</button>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="mt-4 pt-3 border-top d-flex justify-content-between align-items-center">
-                            <span class="small text-muted">{{ table_rows|length }} samples loaded</span>
-                            <button type="submit" class="btn btn-success px-4">Save Sample Sheet</button>
-                        </div>
-                    </form>
+            </div>
+            <form id="sample-form">
+                <div class="tbl-wrap" id="tbl-wrap">
+                    <table class="samples">
+                        <thead id="sample-thead">
+                            <tr>
+                                {% for col in active_pipe.columns %}
+                                <th>{{ col }}</th>
+                                {% endfor %}
+                                <th style="width:32px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="sample-tbody">
+                            {% for row in table_rows %}
+                            <tr>
+                                {% for col in active_pipe.columns %}
+                                <td>
+                                    {% if col == 'date' %}
+                                    <input type="date" name="{{ col }}" value="{{ row[col] }}" required>
+                                    {% else %}
+                                    <input name="{{ col }}" value="{{ row[col] }}" required>
+                                    {% endif %}
+                                </td>
+                                {% endfor %}
+                                <td><button type="button" class="del-btn" onclick="delRow(this)">×</button></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
+
+                <!-- Sample sheet validation errors -->
+                <div class="error-list" id="sample-errors">
+                    <div class="error-list-header">sample sheet errors</div>
+                    <ul id="sample-error-list"></ul>
+                </div>
+
+                <div class="tbl-footer">
+                    <span class="sample-count" id="sample-count">{{ table_rows|length }} rows</span>
+                    <button type="submit" class="btn btn-success" id="sample-save-btn">validate &amp; save</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- 4. Terminal -->
+        <div class="section" style="flex:1;border-bottom:none;">
+            <div class="section-head">
+                <div class="step-num">4</div>
+                <span class="section-title">Execution terminal</span>
+                <span id="term-state" style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-left:8px;"></span>
+            </div>
+            <div class="terminal" id="terminal">
+                <span class="t-dim">── waiting for launch ────────────────────────────</span><br>
             </div>
         </div>
 
-        <div class="col-lg-12">
-            <div class="card shadow-sm border-0 bg-dark">
-                <div class="card-body p-4">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="text-white mb-0 fw-bold">4. EXECUTION TERMINAL</h5>
-                        <button id="run-btn" class="btn btn-success px-5 fw-bold" 
-                                {{ 'disabled' if not exp_config.exp_id or not exp_config.samplesheet }}>
-                            START ANALYSIS
-                        </button>
-                    </div>
-                    <div id="terminal">Waiting for launch...</div>
-                </div>
-            </div>
-        </div>
-    </div>
+    </main>
 </div>
+
+<!-- Toast host -->
+<div id="toast-host"></div>
 
 <script src="{{ url_for('static', filename='js/jquery-3.6.0.js') }}"></script>
 <script src="{{ url_for('static', filename='js/socket.io.js') }}"></script>
-
 <script>
     const socket = io();
-    const activeCols = {{ active_pipe.columns | tojson }};
+    let activeCols = {{ active_pipe.columns | tojson }};
 
-    // Pipeline selection logic
-    function selectPipe(id) {
-        $('#pipe-input').val(id);
-        $('#pipe-form').submit();
+    // ── Toast ───────────────────────────────────────────────────
+    function toast(msg, type = 'ok') {
+        const el = document.createElement('div');
+        el.className = `toast ${type}`;
+        el.textContent = msg;
+        document.getElementById('toast-host').appendChild(el);
+        setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; setTimeout(() => el.remove(), 300); }, 2500);
     }
 
-    // Dynamic row addition
-    $('#add-row').click(function() {
-        let html = '<tr>';
-        activeCols.forEach(c => {
-            html += `<td><input name="${c}" class="form-control form-control-sm border-0 bg-transparent"></td>`;
-        });
-        html += '<td class="text-center"><button type="button" class="btn btn-link text-danger remove-row p-0">×</button></td></tr>';
-        $('#sample-table tbody').append(html);
+    // ── Helpers ─────────────────────────────────────────────────
+    function setRunReady(ready) {
+        document.getElementById('run-btn').disabled = !ready;
+    }
+
+    function updateRowCount() {
+        const n = document.querySelectorAll('#sample-tbody tr').length;
+        const el = document.getElementById('sample-count');
+        el.textContent = `${n} rows`;
+        el.classList.remove('validated');
+    }
+
+    function setValidatedCount(n) {
+        const el = document.getElementById('sample-count');
+        el.textContent = `${n} samples ready`;
+        el.classList.add('validated');
+        const sv = document.getElementById('stat-samples');
+        sv.textContent = n;
+        sv.classList.toggle('has-data', n > 0);
+    }
+
+    function showErrors(listId, wrapperId, errors) {
+        const ul = document.getElementById(listId);
+        const wrap = document.getElementById(wrapperId);
+        ul.innerHTML = errors.map(e => `<li>${e}</li>`).join('');
+        wrap.classList.toggle('show', errors.length > 0);
+    }
+
+    function clearErrors(listId, wrapperId) {
+        document.getElementById(listId).innerHTML = '';
+        document.getElementById(wrapperId).classList.remove('show');
+    }
+
+    function buildRow(cols, data = {}) {
+        let cells = cols.map(c => {
+            const type = c === 'date' ? 'date' : 'text';
+            return `<td><input type="${type}" name="${c}" value="${data[c] || ''}" required></td>`;
+        }).join('');
+        return `<tr>${cells}<td><button type="button" class="del-btn" onclick="delRow(this)">×</button></td></tr>`;
+    }
+
+    function rebuildTable(cols, rows = []) {
+        let hdr = cols.map(c => `<th>${c}</th>`).join('') + '<th style="width:32px;"></th>';
+        document.getElementById('sample-thead').innerHTML = `<tr>${hdr}</tr>`;
+        document.getElementById('sample-tbody').innerHTML = rows.map(r => buildRow(cols, r)).join('');
+        updateRowCount();
+    }
+
+    // ── Lock / unlock section forms ──────────────────────────────
+    function lockForm(formId, editBtnId, stepNumId) {
+        document.getElementById(formId).classList.add('form-locked');
+        document.getElementById(editBtnId).style.display = 'inline-block';
+        if (stepNumId) document.getElementById(stepNumId).classList.add('done');
+    }
+
+    function unlockForm(formId, editBtnId, stepNumId) {
+        document.getElementById(formId).classList.remove('form-locked');
+        document.getElementById(editBtnId).style.display = 'none';
+        if (stepNumId) document.getElementById(stepNumId).classList.remove('done');
+    }
+
+    function lockSampleSheet() {
+        document.getElementById('tbl-wrap').classList.add('tbl-locked');
+        document.getElementById('sample-edit-btn').style.display = 'inline-block';
+        document.getElementById('add-row-btn').style.display = 'none';
+        document.getElementById('scan-btn').style.display = 'none';
+        document.getElementById('sample-save-btn').style.display = 'none';
+        document.getElementById('step3-num').classList.add('done');
+    }
+
+    function unlockSampleSheet() {
+        document.getElementById('tbl-wrap').classList.remove('tbl-locked');
+        document.getElementById('sample-edit-btn').style.display = 'none';
+        document.getElementById('add-row-btn').style.display = 'inline-block';
+        document.getElementById('scan-btn').style.display = 'inline-block';
+        document.getElementById('sample-save-btn').style.display = 'inline-block';
+        document.getElementById('step3-num').classList.remove('done');
+        // Reset validated count back to row count until re-saved
+        updateRowCount();
+        // Invalidate run-ready state since the sheet is now being edited
+        setRunReady(false);
+    }
+
+    function buildParams(params, values) {
+        if (!params || !params.length) return '';
+        const bools = params.filter(p => p.type === 'bool');
+        const rest  = params.filter(p => p.type !== 'bool');
+        let out = rest.map(p => {
+            const v = values[p.id] ?? p.default ?? '';
+            return `<div class="field-wrap">
+                <label class="field-label">${p.label}</label>
+                <input type="${p.type === 'number' ? 'number' : 'text'}" class="fi" name="${p.id}" value="${v}"
+                    ${p.min !== undefined ? `min="${p.min}"` : ''} ${p.max !== undefined ? `max="${p.max}"` : ''}>
+            </div>`;
+        }).join('');
+        if (bools.length) {
+            const boolHtml = bools.map(p => {
+                const v = values[p.id] ?? p.default ?? false;
+                return `<label class="check-item"><input type="checkbox" name="${p.id}" ${v ? 'checked' : ''}> ${p.label}</label>`;
+            }).join('');
+            out += `<div class="field-wrap full"><div class="check-row">${boolHtml}</div></div>`;
+        }
+        return out;
+    }
+
+    function termLine(html) {
+        const t = document.getElementById('terminal');
+        t.innerHTML += html + '<br>';
+        t.scrollTop = t.scrollHeight;
+    }
+
+    // ── 1. Pipeline selection ───────────────────────────────────
+    function selectPipe(id) {
+        const fd = new FormData();
+        fd.append('pipeline_select', id);
+        fetch('/set_pipeline', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.ok) { toast(data.error, 'err'); return; }
+                document.querySelectorAll('.pipeline-card').forEach(c => c.classList.remove('selected'));
+                document.querySelector(`.pipeline-card[data-pipe-id="${id}"]`).classList.add('selected');
+                document.getElementById('pipe-label').textContent = id;
+                document.getElementById('pipe-dot').classList.add('active');
+                activeCols = data.columns;
+                document.getElementById('params-area').innerHTML = buildParams(data.params, data.param_values);
+                rebuildTable(data.columns);
+                // Reset forms to editable state on pipeline switch
+                unlockForm('config-form', 'config-edit-btn', 'step2-num');
+                unlockSampleSheet();
+                clearErrors('config-error-list', 'config-errors');
+                clearErrors('sample-error-list', 'sample-errors');
+                setRunReady(false);
+                toast(`pipeline → ${id}`);
+            })
+            .catch(() => toast('failed to switch pipeline', 'err'));
+    }
+
+    // ── 2. Config form ──────────────────────────────────────────
+    document.getElementById('config-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        clearErrors('config-error-list', 'config-errors');
+
+        const fd = new FormData(this);
+        fetch('/get_run_info_base', { method: 'POST', body: fd })
+            .then(r => r.json().then(data => ({ ok: r.ok, data })))
+            .then(({ ok, data }) => {
+                if (!ok || !data.ok) {
+                    showErrors('config-error-list', 'config-errors', data.errors || [data.error]);
+                    toast(data.error || 'validation failed', 'err');
+                    return;
+                }
+                setRunReady(data.run_ready);
+                document.getElementById('stat-runid').textContent = fd.get('exp-id') || '—';
+                lockForm('config-form', 'config-edit-btn', 'step2-num');
+                toast('configuration saved');
+            })
+            .catch(() => toast('failed to save config', 'err'));
     });
 
-    // Row removal logic
-    $(document).on('click', '.remove-row', function() { 
-        $(this).closest('tr').fadeOut(200, function() { $(this).remove(); });
+    // ── 3. Sample sheet ─────────────────────────────────────────
+    document.getElementById('add-row-btn').addEventListener('click', () => {
+        document.getElementById('sample-tbody').insertAdjacentHTML('beforeend', buildRow(activeCols));
+        updateRowCount();
     });
 
-    // Run Workflow logic
-    $('#run-btn').click(function() {
-        $('#terminal').empty().append('<span class="text-warning">Initializing Nextflow...</span>\n');
+    function delRow(btn) {
+        btn.closest('tr').remove();
+        updateRowCount();
+    }
+
+    document.getElementById('sample-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        clearErrors('sample-error-list', 'sample-errors');
+        const fd = new FormData(this);
+        fetch('/update_samples', { method: 'POST', body: fd })
+            .then(r => r.json().then(data => ({ ok: r.ok, data })))
+            .then(({ ok, data }) => {
+                if (!ok || !data.ok) {
+                    showErrors('sample-error-list', 'sample-errors', data.errors || [data.error]);
+                    toast(data.error || 'validation failed', 'err');
+                    return;
+                }
+                setValidatedCount(data.n_samples);
+                setRunReady(data.run_ready);
+                lockSampleSheet();
+                toast('sample sheet validated & saved');
+            })
+            .catch(() => toast('failed to save sample sheet', 'err'));
+    });
+
+    document.getElementById('scan-btn').addEventListener('click', () => {
+        fetch('/refresh_sample_sheet')
+            .then(r => r.json())
+            .then(data => {
+                if (!data.ok) { toast('scan failed', 'err'); return; }
+                activeCols = data.columns;
+                rebuildTable(data.columns, data.rows);
+                clearErrors('sample-error-list', 'sample-errors');
+                toast(`${data.rows.length} sample(s) detected — review then save`);
+            })
+            .catch(() => toast('scan failed', 'err'));
+    });
+
+    // ── 4. Run / stop ───────────────────────────────────────────
+    function lockApp() {
+        document.querySelector('.shell').classList.add('app-locked');
+        document.getElementById('cancel-btn').style.display = 'inline-block';
+        document.getElementById('run-btn').classList.add('running');
+        document.getElementById('run-btn').textContent = '⟳ running';
+        document.getElementById('run-btn').disabled = true;
+        document.getElementById('term-state').textContent = '● running';
+        document.getElementById('term-state').style.color = 'var(--amber)';
+    }
+
+    function unlockApp(state) {
+        document.querySelector('.shell').classList.remove('app-locked');
+        document.getElementById('cancel-btn').style.display = 'none';
+        const btn = document.getElementById('run-btn');
+        btn.classList.remove('running');
+        btn.disabled = false;
+        if (state === 'done') {
+            btn.textContent = '▶ run again';
+            document.getElementById('term-state').textContent = '✓ complete';
+            document.getElementById('term-state').style.color = 'var(--green)';
+        } else {
+            btn.textContent = '▶ run analysis';
+            document.getElementById('term-state').textContent = '✗ stopped';
+            document.getElementById('term-state').style.color = 'var(--red)';
+        }
+    }
+
+    document.getElementById('run-btn').addEventListener('click', function() {
+        document.getElementById('terminal').innerHTML =
+            '<span class="t-dim">── launching nextflow ───────────────────────────────────</span><br>';
+        lockApp();
         socket.emit('run_workflow');
-        $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span> Running...');
     });
 
-    // Socket listeners
+    function cancelRun() {
+        const confirmed = confirm(
+            'Stop the running workflow?\n\nNextflow will be killed immediately. ' +
+            'Partial outputs may be incomplete. This cannot be undone.'
+        );
+        if (!confirmed) return;
+        socket.emit('cancel_workflow');
+    }
+
     socket.on('workflow_output', function(msg) {
-        const term = $('#terminal');
-        term.append(msg.data);
-        term.scrollTop(term[0].scrollHeight);
+        const t = document.getElementById('terminal');
+        const line = msg.data
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/\[ERROR\]/g,   '<span class="t-red">[ERROR]</span>')
+            .replace(/\[WARN\]/g,    '<span class="t-amber">[WARN]</span>')
+            .replace(/\[.*?DONE.*?\]/gi, match => `<span class="t-green">${match}</span>`)
+            .replace(/(N E X T F L O W)/g, '<span class="t-blue">$1</span>');
+        t.innerHTML += line;
+        t.scrollTop = t.scrollHeight;
     });
 
     socket.on('finish', function() {
-        $('#run-btn').html('Execution Finished').removeClass('btn-success').addClass('btn-secondary');
+        unlockApp('done');
+        termLine('<span class="t-green">── pipeline finished ────────────────────────────────────</span>');
     });
-</script>
 
+    socket.on('workflow_cancelled', function() {
+        unlockApp('cancelled');
+        termLine('<span class="t-red">── workflow stopped by user ─────────────────────────────</span>');
+    });
+
+    // ── Reset ────────────────────────────────────────────────────
+    function resetAll() {
+        if (!confirm('Reset all configuration and samples?')) return;
+        fetch('/reset_all')
+            .then(r => r.json())
+            .then(data => { if (data.ok) location.reload(); });
+    }
+
+    // ── Restore locked state on page load if already configured ──
+    (function restoreState() {
+        {% if exp_config.exp_id %}
+            lockForm('config-form', 'config-edit-btn', 'step2-num');
+        {% endif %}
+        {% if table_rows|length > 0 %}
+            lockSampleSheet();
+            setValidatedCount({{ table_rows|length }});
+        {% endif %}
+    })();
+</script>
 </body>
 </html>

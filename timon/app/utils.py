@@ -31,28 +31,25 @@ def convert_realpaths_to_wildcards(paths):
         return ",".join(paths)
 
     dir_prefix = dirs[0]
-    # Find common prefix
     common_prefix = os.path.commonprefix(basenames)
-    # Find common suffix
     reversed_basenames = [b[::-1] for b in basenames]
     common_suffix_reversed = os.path.commonprefix(reversed_basenames)
     common_suffix = common_suffix_reversed[::-1]
 
-    # Construct wildcard for variable middle part
     wildcard = common_prefix + "*" + common_suffix
     return os.path.join(dir_prefix, wildcard)
 
-def detect_samples_files():
+def detect_samples_files(folder=None):
     """
     Detects fastq files up to 2 levels deep. 
     Uses folder context for 'barcode*' directories and 
     common prefix grouping for others.
     """
-    if not os.path.exists(Config.IMPORT_FOLDER):
+    target = folder or Config.IMPORT_FOLDER
+    if not os.path.exists(target):
         return {}
-    
 
-    root_base = os.path.abspath(Config.IMPORT_FOLDER)
+    root_base = os.path.abspath(target)
     base_level = root_base.count(os.sep)
     fastq_pattern = re.compile(r'\.f(ast)?q(\.gz)?$', re.IGNORECASE)
     
