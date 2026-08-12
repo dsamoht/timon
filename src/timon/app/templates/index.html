@@ -13,21 +13,26 @@
             --bg:        #f0f2f6;
             --surface:   #ffffff;
             --surface2:  #e8ebf0;
-            --border:    #c8cdd6;
-            --border2:   #a8b0bc;
-            --text:      #0d1117;
-            --text-dim:  #374151;
-            --text-mid:  #2d3748;
-            --accent:    #2563eb;
+            /* Every value below clears WCAG AA against all three surfaces
+               (--surface, --bg, --surface2): 4.5:1 for text, 3:1 for the
+               borders that delineate cards, inputs and other controls. */
+            --border:    #7b8494;   /* 3.15:1 worst case */
+            --border2:   #6b7482;   /* 3.95:1 */
+            --text:      #0d1117;   /* 15.84:1 */
+            --text-dim:  #374151;   /*  8.63:1 */
+            --text-mid:  #2d3748;   /* 10.03:1 */
+            --text-muted:#5f6875;   /*  4.72:1 — secondary labels and buttons */
+            --accent:    #1d4ed8;   /*  5.61:1 */
             --accent-dim:#bfdbfe;
-            --accent-glow:rgba(37,99,235,.07);
-            --green:     #16a34a;
+            --accent-glow:rgba(29,78,216,.07);
+            --green:     #166534;   /*  5.97:1 */
             --green-dim: #bbf7d0;
-            --amber:     #d97706;
-            --red:       #dc2626;
+            --amber:     #92400e;   /*  5.93:1 */
+            --red:       #b91c1c;   /*  5.41:1 */
             --red-dim:   #fecaca;
             --mono: 'IBM Plex Mono', monospace;
             --sans: 'IBM Plex Sans', sans-serif;
+            --topbar-h: 80px;
         }
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -51,8 +56,11 @@
         .shell {
             display: grid;
             grid-template-columns: 200px 1fr;
-            grid-template-rows: 80px 1fr;
+            grid-template-rows: var(--topbar-h) 1fr;
             height: 100vh;
+            /* dvh accounts for mobile browser chrome (address bar etc.)
+               resizing the viewport; falls back to vh where unsupported. */
+            height: 100dvh;
             overflow: hidden;
         }
 
@@ -111,11 +119,15 @@
             display: flex;
             align-items: center;
             gap: 12px;
+            /* The run/stop buttons must stay reachable when the bar is tight. */
+            min-width: 0;
+            flex-shrink: 0;
         }
 
         .pulse-dot {
             position: relative;
             width: 8px; height: 8px;
+            flex-shrink: 0;
         }
         .pulse-dot::before {
             content: '';
@@ -132,22 +144,37 @@
             border-radius: 50%;
             background: var(--green);
         }
+        /* Nextflow missing: red and still, so it never reads as "fine". */
+        .pulse-dot.bad::before {
+            background: var(--red);
+            animation: none;
+        }
+        .pulse-dot.bad::after { background: var(--red); }
+        /* Ring colour tracks --green (#166534); kept literal because
+           box-shadow needs an alpha channel. */
         @keyframes pulse-ring {
-            0%   { box-shadow: 0 0 0 0 rgba(34,197,94,.5); }
-            70%  { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
-            100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+            0%   { box-shadow: 0 0 0 0 rgba(22,101,52,.5); }
+            70%  { box-shadow: 0 0 0 6px rgba(22,101,52,0); }
+            100% { box-shadow: 0 0 0 0 rgba(22,101,52,0); }
         }
 
         .status-text {
             font-family: var(--mono);
             font-size: 11px;
             color: var(--text-dim);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 26ch;
         }
 
         #run-btn {
             font-family: var(--mono);
             font-size: 12px;
             font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
             padding: 7px 20px;
             border-radius: 4px;
             border: 1px solid var(--accent);
@@ -173,6 +200,8 @@
 
         #cancel-btn {
             display: none;
+            align-items: center;
+            gap: 4px;
             font-family: var(--mono);
             font-size: 12px;
             padding: 7px 16px;
@@ -217,7 +246,7 @@
             padding: 7px 8px;
             border-radius: 4px;
             font-size: 13px;
-            color: #8a95a6;
+            color: var(--text-muted);
             cursor: pointer;
             border: 1px solid transparent;
             transition: background 0.12s, color 0.12s;
@@ -272,7 +301,7 @@
             border-radius: 4px;
             font-family: var(--mono);
             font-size: 11px;
-            color: #8a95a6;
+            color: var(--text-muted);
         }
         .pipe-indicator {
             width: 6px; height: 6px;
@@ -283,12 +312,45 @@
         }
         .pipe-indicator.active { background: var(--accent); }
 
+        /* ─── MOBILE MENU TOGGLE ─────────────────────────────────── */
+        /* Hidden on docked-sidebar layouts; shown once the sidebar becomes
+           a drawer (see the ≤900px tier below). */
+        .menu-btn {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            width: 32px; height: 32px;
+            border-radius: 4px;
+            border: 1px solid transparent;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .menu-btn:hover { background: var(--surface2); color: var(--text); }
+        .menu-btn svg { width: 16px; height: 16px; }
+
+        .sidebar-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            top: var(--topbar-h);
+            background: rgba(13, 17, 23, 0.4);
+            z-index: 55;
+        }
+        .sidebar-backdrop.show { display: block; }
+
         /* ─── MAIN ───────────────────────────────────────────────── */
         .main {
             overflow-y: auto;
             background: var(--bg);
             display: flex;
             flex-direction: column;
+            /* Grid items default to min-width:auto, so a wide child (the card
+               row, the sample table) pushes this track past the viewport and
+               .shell's overflow:hidden clips it with no way to scroll back.
+               Allowing it to shrink lets inner overflow-x containers scroll. */
+            min-width: 0;
         }
 
         /* ─── SECTION ────────────────────────────────────────────── */
@@ -343,7 +405,9 @@
         /* ─── PIPELINE CARDS ─────────────────────────────────────── */
         .pipeline-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            /* Wrap rather than squeeze: three fixed columns overflowed the
+               viewport on anything narrower than ~1500px. */
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
             gap: 10px;
         }
 
@@ -410,10 +474,12 @@
         /* ─── FORMS ──────────────────────────────────────────────── */
         .form-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 12px;
         }
-        .form-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+        .form-grid.cols-3 {
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        }
 
         .field-wrap { display: flex; flex-direction: column; gap: 5px; }
         .field-wrap.full { grid-column: 1 / -1; }
@@ -495,7 +561,7 @@
             cursor: pointer;
             font-family: var(--mono);
             font-size: 11px;
-            color: #8a95a6;
+            color: var(--text-muted);
         }
         .check-item input[type="checkbox"] {
             accent-color: var(--accent);
@@ -551,7 +617,7 @@
             cursor: pointer;
             border: 1px solid var(--border2);
             background: transparent;
-            color: #8a95a6;
+            color: var(--text-muted);
             transition: background 0.12s, color 0.12s, border-color 0.12s;
             white-space: nowrap;
         }
@@ -677,6 +743,7 @@
             line-height: 1.8;
             height: 260px;
             overflow-y: auto;
+            overflow-x: auto;
             color: #c9d5e8;
             white-space: pre;
         }
@@ -684,7 +751,9 @@
         .terminal .t-green  { color: #4ade80; }
         .terminal .t-amber  { color: #fbbf24; }
         .terminal .t-red    { color: #f87171; }
-        .terminal .t-dim    { color: #4a5568; }
+        /* 4.84:1 on the terminal's #1a1f2b — still clearly dimmer than the
+           #c9d5e8 body text (11.11:1), but readable. Was #4a5568 at 2.19:1. */
+        .terminal .t-dim    { color: #7d8ca6; }
         .terminal .t-bright { color: #e2e8f0; }
 
         /* ─── APP LOCK ───────────────────────────────────────────── */
@@ -736,7 +805,7 @@
         /* ─── PARAMS SECTION ─────────────────────────────────────── */
         #params-area {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 12px;
         }
 
@@ -747,6 +816,86 @@
             gap: 8px;
             margin-top: 14px;
         }
+
+        /* ─── RESPONSIVE ─────────────────────────────────────────── */
+        /* Laptop (≤1200px): narrower docked sidebar. This is the ~1440x900
+           case where the run button used to sit partly off-screen.
+
+           Tablet/phone (≤900px): the sidebar leaves the grid and becomes a
+           slide-in drawer behind a hamburger toggle. A permanently docked
+           sidebar eats too much of a tablet-width viewport — and the old
+           behaviour here was just `display:none`, which stranded "reset
+           all" and the run stats with no way back in.
+
+           Phone (≤600px): compact the topbar further and fix iOS Safari's
+           input-zoom.  Small phone (≤480px): run/stop buttons drop their
+           text label and become icon-only. */
+        @media (max-width: 1200px) {
+            :root { --topbar-h: 64px; }
+            .shell      { grid-template-columns: 168px 1fr; }
+            .brand-mark { height: 56px; }
+            .section    { padding: 16px; }
+        }
+
+        @media (max-width: 900px) {
+            :root { --topbar-h: 56px; }
+            .shell { grid-template-columns: 1fr; }
+            /* Taking the sidebar out of flow (position:fixed, below) leaves
+               it out of grid auto-placement too, so .main would otherwise
+               be auto-placed into column 1 instead of the intended column. */
+            .main  { grid-column: 1; }
+
+            .menu-btn   { display: inline-flex; }
+            .brand-mark { height: 44px; }
+
+            .sidebar {
+                position: fixed;
+                top: var(--topbar-h);
+                left: 0;
+                bottom: 0;
+                width: 260px;
+                max-width: 82vw;
+                transform: translateX(-100%);
+                transition: transform 0.2s ease;
+                z-index: 60;
+                box-shadow: 4px 0 20px rgba(13, 17, 23, 0.2);
+            }
+            .sidebar.open { transform: translateX(0); }
+
+            .version-tag, .topbar-divider { display: none; }
+            .status-text { max-width: 14ch; }
+        }
+
+        @media (max-width: 600px) {
+            :root { --topbar-h: 52px; }
+            .brand-mark { height: 40px; }
+            .topbar     { padding: 0 12px; gap: 10px; }
+            .section    { padding: 12px; }
+            .terminal   { height: 200px; padding: 12px 14px; }
+            #toast-host { left: 12px; right: 12px; bottom: 12px; }
+            .toast      { width: 100%; }
+
+            /* iOS Safari zooms the whole page in on focusing any text
+               input under 16px; these run smaller for density on larger
+               screens, so bump them back up here. */
+            input[type="text"].fi,
+            input[type="number"].fi,
+            input[type="email"].fi,
+            table.samples tbody td input {
+                font-size: 16px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            :root { --topbar-h: 46px; }
+            .brand-mark  { height: 32px; }
+            .topbar      { padding: 0 10px; gap: 8px; }
+            .status-text { display: none; }
+
+            #run-btn, #cancel-btn { padding: 8px 10px; }
+            #run-btn .btn-label,
+            #cancel-btn .btn-label { display: none; }
+        }
     </style>
 </head>
 <body>
@@ -754,27 +903,38 @@
 
     <!-- ── TOPBAR ──────────────────────────────────────────────── -->
     <header class="topbar">
+        <button id="menu-btn" class="menu-btn" type="button"
+                aria-label="Toggle menu" aria-expanded="false" aria-controls="sidebar">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                <line x1="1" y1="4" x2="15" y2="4"/>
+                <line x1="1" y1="8" x2="15" y2="8"/>
+                <line x1="1" y1="12" x2="15" y2="12"/>
+            </svg>
+        </button>
         <a class="brand" href="#">
             <div class="brand-mark">
                 <img src="{{ url_for('static', filename='img/timon_logo_light.png') }}" alt="timon">
             </div>
         </a>
         <div class="topbar-divider"></div>
-        <span class="version-tag">v0.1.0</span>
+        <span class="version-tag">v{{ version }}</span>
 
         <div class="topbar-right">
-            <div class="pulse-dot"></div>
-            <span class="status-text">nextflow ready</span>
-            <button id="cancel-btn" onclick="cancelRun()">■ stop</button>
-            <button id="run-btn"
-                    {{ 'disabled' if not exp_config.exp_id or not exp_config.samplesheet }}>
-                ▶ run analysis
+            <div class="pulse-dot {{ 'ok' if nextflow.ok else 'bad' }}"
+                 title="{{ nextflow.detail }}"></div>
+            <span class="status-text" title="{{ nextflow.detail }}">{{ nextflow.label }}</span>
+            <button id="cancel-btn" onclick="cancelRun()" aria-label="Stop workflow">
+                <span class="btn-icon">■</span><span class="btn-label"> stop</span>
+            </button>
+            <button id="run-btn" aria-label="Run analysis"
+                    {{ 'disabled' if not exp_config.exp_id or not exp_config.samplesheet or not nextflow.ok }}>
+                <span class="btn-icon">▶</span><span class="btn-label"> run analysis</span>
             </button>
         </div>
     </header>
 
     <!-- ── SIDEBAR ─────────────────────────────────────────────── -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
 
         <div class="sidebar-section">
             <div class="sidebar-label">Navigation</div>
@@ -822,6 +982,8 @@
         </div>
 
     </aside>
+
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
     <!-- ── MAIN ────────────────────────────────────────────────── -->
     <main class="main">
@@ -982,6 +1144,35 @@
         document.getElementById('toast-host').appendChild(el);
         setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; setTimeout(() => el.remove(), 300); }, 2500);
     }
+
+    // ── Mobile sidebar drawer ───────────────────────────────────
+    const sidebarEl   = document.getElementById('sidebar');
+    const backdropEl  = document.getElementById('sidebar-backdrop');
+    const menuBtn     = document.getElementById('menu-btn');
+    const drawerQuery = window.matchMedia('(max-width: 900px)');
+
+    function openSidebar() {
+        sidebarEl.classList.add('open');
+        backdropEl.classList.add('show');
+        menuBtn.setAttribute('aria-expanded', 'true');
+    }
+    function closeSidebar() {
+        sidebarEl.classList.remove('open');
+        backdropEl.classList.remove('show');
+        menuBtn.setAttribute('aria-expanded', 'false');
+    }
+    function toggleSidebar() {
+        sidebarEl.classList.contains('open') ? closeSidebar() : openSidebar();
+    }
+
+    menuBtn.addEventListener('click', toggleSidebar);
+    backdropEl.addEventListener('click', closeSidebar);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSidebar(); });
+    sidebarEl.querySelectorAll('.nav-item').forEach(el => el.addEventListener('click', closeSidebar));
+    // Crossing back to the docked-sidebar layout mid-session (rotating a
+    // tablet, resizing a window) shouldn't leave the drawer stuck open
+    // underneath what is now a statically positioned sidebar.
+    drawerQuery.addEventListener('change', e => { if (!e.matches) closeSidebar(); });
 
     // ── Helpers ─────────────────────────────────────────────────
     function setRunReady(ready) {
@@ -1187,11 +1378,21 @@
     });
 
     // ── 4. Run / stop ───────────────────────────────────────────
+    // The run button's label is split into icon/text spans so narrow
+    // viewports can hide just the text (see .btn-label at ≤480px) without
+    // losing the accessible name — textContent alone couldn't do that.
+    function setRunBtnState(icon, label, ariaLabel) {
+        const btn = document.getElementById('run-btn');
+        btn.querySelector('.btn-icon').textContent = icon;
+        btn.querySelector('.btn-label').textContent = ' ' + label;
+        btn.setAttribute('aria-label', ariaLabel);
+    }
+
     function lockApp() {
         document.querySelector('.shell').classList.add('app-locked');
-        document.getElementById('cancel-btn').style.display = 'inline-block';
+        document.getElementById('cancel-btn').style.display = 'inline-flex';
         document.getElementById('run-btn').classList.add('running');
-        document.getElementById('run-btn').textContent = '⟳ running';
+        setRunBtnState('⟳', 'running', 'Workflow running');
         document.getElementById('run-btn').disabled = true;
         document.getElementById('term-state').textContent = '● running';
         document.getElementById('term-state').style.color = 'var(--amber)';
@@ -1204,11 +1405,11 @@
         btn.classList.remove('running');
         btn.disabled = false;
         if (state === 'done') {
-            btn.textContent = '▶ run again';
+            setRunBtnState('▶', 'run again', 'Run analysis again');
             document.getElementById('term-state').textContent = '✓ complete';
             document.getElementById('term-state').style.color = 'var(--green)';
         } else {
-            btn.textContent = '▶ run analysis';
+            setRunBtnState('▶', 'run analysis', 'Run analysis');
             document.getElementById('term-state').textContent = '✗ stopped';
             document.getElementById('term-state').style.color = 'var(--red)';
         }

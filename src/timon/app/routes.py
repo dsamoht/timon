@@ -1,9 +1,10 @@
 from flask import render_template, request, current_app as app, jsonify
 import pandas as pd
 import uuid, os, re
-from .core import EXP_CONFIG, SAMPLES
+from .. import __version__
+from .core import EXP_CONFIG, SAMPLES, nextflow_status
 from .config import Config, PIPELINES
-from .utils import detect_samples_files, input_validation
+from .utils import detect_samples_files
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
@@ -117,7 +118,9 @@ def index():
                            exp_config=EXP_CONFIG.as_dict(),
                            table_rows=SAMPLES,
                            pipelines=PIPELINES,
-                           active_pipe=EXP_CONFIG.get_pipe())
+                           active_pipe=EXP_CONFIG.get_pipe(),
+                           version=__version__,
+                           nextflow=nextflow_status())
 
 
 @app.route("/set_pipeline", methods=["POST"])

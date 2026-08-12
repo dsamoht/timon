@@ -78,13 +78,21 @@ def handle_cancel():
 
 @socketio.on('disconnect')
 def handle_disconnect():
+    def _idle() -> bool:
+        return (len(socketio.server.manager.rooms.get('/', {})) == 0
+                and WF_SUBPROCESS.process is None)
+
     try:
-        clients = len(socketio.server.manager.rooms.get('/', {}))
-        if clients == 0:
-            print("No clients connected. Shutting down in 3 seconds...")
+        # Never quit out from under a running workflow: natively installed,
+        # os._exit would orphan the nextflow subprocess rather than stop a
+        # container. A page reload also fires disconnect, so re-check after
+        # the grace period to see whether the client came back.
+        if _idle():
             def shutdown():
                 time.sleep(3)
-                os._exit(0)
+                if _idle():
+                    print("No clients connected. Shutting down.")
+                    os._exit(0)
             threading.Thread(target=shutdown, daemon=True).start()
     except Exception:
         pass
