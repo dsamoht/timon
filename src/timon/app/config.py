@@ -1,10 +1,14 @@
 import os
+import secrets
 
 class Config:
-    SECRET_KEY   = "timon_secret_key!"
+    SECRET_KEY    = os.getenv("TIMON_SECRET_KEY") or secrets.token_hex(32)
     IMPORT_FOLDER = os.getenv("INPUT_DIR",  "imports")
     KRAKEN_DB     = os.getenv("KRAKEN_DB",  "")
     GTDBTK_DB     = os.getenv("GTDBTK_DB", "")
+    # Container engine Nextflow provisions tasks with. Every pipeline declares
+    # which of these it supports; see "profiles" below.
+    PROFILE       = os.getenv("TIMON_PROFILE", "docker")
 
 PIPELINES = {
     "roshab-cli": {
@@ -12,6 +16,10 @@ PIPELINES = {
         "description": "Taxonomic classification and evaluation of cyanotoxin biosynthesis potential from nanopore reads",
         "icon": "img/bloom_orig.png",
         "pipeline": "dsamoht/roshab-cli",
+        # Upstream has no tags yet, so this is pinned to a commit. Replace with
+        # a tag once roshab-cli cuts a release; bumping it is a timon release.
+        "revision": "20fabf2f4cd371ecaed54943df37b3d0e425589d",
+        "profiles": ["docker", "singularity", "apptainer"],
         "file_column": "reads",
         "requires_db": ["kraken_db"],
         "columns": ["sample_name", "date", "info", "group", "reads"],
@@ -29,6 +37,10 @@ PIPELINES = {
         "description": "Automation of metagenome assembly and binning with support for nanopore reads",
         "icon": "img/mag-icon.png",
         "pipeline": "dsamoht/mag-ont",
+        # Latest upstream release. main is ahead (unreleased 1.4.0, nf-core
+        # template) and adds a conda profile — bump here once it is tagged.
+        "revision": "v1.3.1",
+        "profiles": ["docker", "singularity", "apptainer"],
         "file_column": "long_reads",
         "requires_db": ["gtdbtk_db"],
         "columns": ["sample_id", "group", "assembly_fasta", "long_reads", "short_reads_1", "short_reads_2"],
@@ -47,6 +59,10 @@ PIPELINES = {
         "description": "Workflow for consensus isolate genome assembly",
         "icon": "img/isolate-icon.png",
         "pipeline": "dsamoht/isolate-wf",
+        # The repository is not published yet; runs are refused until it exists
+        # and a revision is pinned here.
+        "revision": None,
+        "profiles": ["docker", "singularity", "apptainer"],
         "file_column": "long_reads",
         "requires_db": [],
         "columns": ["sample_id", "long_reads", "short_reads_1", "short_reads_2"],

@@ -1,9 +1,19 @@
 .venv
 uv.lock
-.python-version
-main.py
-pyproject.toml
-README
+
+# Reference data — downloaded with `timon fetch-db`, never committed
+data/
+
+# Runtime scratch
+imports/
+work/
+.nextflow*
+
+# Build artefacts
+build/
+dist/
+*.egg-info/
+__pycache__/
+
 **/.DS_Store
-timon/data
 .DS_Store
