@@ -2,18 +2,7 @@ import os
 import re
 from collections import defaultdict
 from .config import Config
-from os.path import commonprefix
 
-
-def input_validation(name):
-    """Checks if the experiment ID contains illegal characters."""
-    if not name:
-        return False
-    # Avoid characters that break shell commands or file paths
-    for char in name:
-        if char in [r"?", "\\", r"/", r".", r",", r":", r";", r" "]:
-            return False
-    return True
 
 def convert_realpaths_to_wildcards(paths):
     """
@@ -70,7 +59,7 @@ def detect_samples_files(folder=None):
 
         if folder_name.lower().startswith("barcode"):
             names_only = [fastq_pattern.sub('', f) for f in current_fastq]
-            prefix = commonprefix(names_only)
+            prefix = os.path.commonprefix(names_only)
             sample_name = re.sub(r'[._-]+$', '', prefix)
             
             if len(sample_name) < 2:

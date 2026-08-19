@@ -8,9 +8,10 @@ from ..paths import genes_db, genomes_db, missing_reference_data
 
 SAMPLES = []
 
-DB_REGISTRY = {
-    "kraken_db": (lambda: Config.KRAKEN_DB, "--kraken_db"),
-    "gtdbtk_db": (lambda: Config.GTDBTK_DB, "--gtdbtk_db"),
+# Nextflow flag each database declared in a pipeline's "requires_db" is passed under.
+DB_FLAGS = {
+    "kraken_db": "--kraken_db",
+    "gtdbtk_db": "--gtdbtk_db",
 }
 
 
@@ -159,10 +160,9 @@ class WorkflowSubprocess:
         ]
 
         for db_key in pipe.get("requires_db", []):
-            _, nf_flag = DB_REGISTRY[db_key]
             val = config_dict.get(db_key, "")
             if val:
-                cmd.extend([nf_flag, val])
+                cmd.extend([DB_FLAGS[db_key], val])
 
         for k, v in config_dict["params"].items():
             if isinstance(v, bool):
@@ -175,8 +175,8 @@ class WorkflowSubprocess:
             missing = missing_reference_data()
             if missing:
                 raise WorkflowError(
-                    "reference data missing — run `timon fetch-db`, or set "
-                    "TIMON_DB_DIR to an existing copy.\n  " + "\n  ".join(missing)
+                    "reference data missing — set TIMON_DB_DIR to a directory "
+                    "holding it.\n  " + "\n  ".join(missing)
                 )
             cmd.extend(["--genomes_db", str(genomes_db())])
             cmd.extend(["--genes_db", str(genes_db())])

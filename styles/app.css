@@ -1,0 +1,442 @@
+@import "tailwindcss";
+
+/* The templates live outside this file's directory, so point the scanner at
+   them explicitly rather than relying on auto-detection. */
+@source "../src/timon/app/templates";
+
+/* ─── FONTS ───────────────────────────────────────────────────────────────
+   Self-hosted so the app renders identically with or without a network.
+   Both faces are SIL OFL 1.1 (see static/fonts/LICENSE-*.txt) and ship
+   inside the wheel. Only the latin and latin-ext subsets are vendored —
+   the UI is English-only, and unicode-range means a browser would never
+   have fetched the cyrillic/greek/vietnamese cuts anyway.
+
+   Paths are relative to the *built* stylesheet (static/style/app.css),
+   not to this source file.                                              */
+@font-face {
+    font-family: 'IBM Plex Mono';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('../fonts/ibm-plex-mono-400-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+    font-family: 'IBM Plex Mono';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('../fonts/ibm-plex-mono-400-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: 'IBM Plex Mono';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('../fonts/ibm-plex-mono-500-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+    font-family: 'IBM Plex Mono';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('../fonts/ibm-plex-mono-500-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url('../fonts/inter-300-700-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url('../fonts/inter-300-700-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ─── TOKENS ──────────────────────────────────────────────────────────────
+   Ported from the hand-written :root block. Every value below still clears
+   WCAG AA against all three surfaces (surface, bg, surface2): 4.5:1 for
+   text, 3:1 for the borders that delineate cards, inputs and controls.
+   The ratios in the comments are the worst case of the three.
+
+   Renamed from the old CSS variables only where Tailwind's utility naming
+   would have produced something unreadable: --text → ink (text-ink, not
+   text-text) and --border → edge (border-edge, not border-border).        */
+@theme {
+    --color-bg:          #f0f2f6;
+    --color-surface:     #ffffff;
+    --color-surface2:    #e8ebf0;
+
+    --color-edge:        #7b8494;   /* 3.15:1 */
+    --color-edge2:       #6b7482;   /* 3.95:1 */
+
+    --color-ink:         #0d1117;   /* 15.84:1 */
+    --color-ink-dim:     #374151;   /*  8.63:1 */
+    --color-ink-mid:     #2d3748;   /* 10.03:1 */
+    --color-ink-muted:   #5f6875;   /*  4.72:1 — secondary labels and buttons */
+
+    --color-accent:      #1d4ed8;   /*  5.61:1 */
+    --color-accent-dim:  #bfdbfe;
+    --color-accent-glow: rgba(29, 78, 216, .07);
+
+    --color-green:       #166534;   /*  5.97:1 */
+    --color-green-dim:   #bbf7d0;
+    --color-green-bg:    #f0fdf4;
+    --color-amber:       #92400e;   /*  5.93:1 */
+    --color-red:         #b91c1c;   /*  5.41:1 */
+    --color-red-dim:     #fecaca;
+    --color-red-bg:      #fff5f5;
+    --color-red-deep:    #7f1d1d;
+
+    /* Terminal palette — dark surface, so these are tuned against #1a1f2b
+       rather than the light surfaces above. */
+    --color-term:        #1a1f2b;
+    --color-term-text:   #c9d5e8;   /* 11.11:1 */
+    --color-term-blue:   #60a5fa;
+    --color-term-green:  #4ade80;
+    --color-term-amber:  #fbbf24;
+    --color-term-red:    #f87171;
+    --color-term-dim:    #7d8ca6;   /*  4.84:1 — dimmer than body text, still readable */
+
+    /* Inter, matching tailwindcss.com — a variable face, so 300–700 all come
+       from one file. system-ui last mirrors their fallback chain. */
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+
+    /* Named for the device tier each one describes. Tailwind's default
+       sm/md/lg/xl/2xl are deliberately left untouched, so utility classes
+       copied from Tailwind docs or marketing markup keep their usual
+       meaning; these four are additive and used via max-* variants. */
+    --breakpoint-phone:   480px;
+    --breakpoint-compact: 600px;
+    --breakpoint-tablet:  900px;
+    --breakpoint-laptop: 1200px;
+
+    --animate-pulse-ring: pulse-ring 2s ease infinite;
+    --animate-slide-in:   slide-in 0.2s ease;
+
+    /* Ring colour tracks --color-green (#166534); kept literal because
+       box-shadow needs an alpha channel. */
+    @keyframes pulse-ring {
+        0%   { box-shadow: 0 0 0 0 rgba(22, 101, 52, .5); }
+        70%  { box-shadow: 0 0 0 6px rgba(22, 101, 52, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(22, 101, 52, 0); }
+    }
+    @keyframes slide-in {
+        from { transform: translateX(30px); opacity: 0; }
+        to   { transform: translateX(0);    opacity: 1; }
+    }
+}
+
+@layer base {
+    /* Not a @theme value: it changes per breakpoint, which theme variables
+       cannot do. Read in markup with h-(--topbar-h) / grid-rows-(...). */
+    :root { --topbar-h: 80px; }
+    @media (max-width: 1200px) { :root { --topbar-h: 64px; } }
+    @media (max-width:  900px) { :root { --topbar-h: 56px; } }
+    @media (max-width:  600px) { :root { --topbar-h: 52px; } }
+    @media (max-width:  480px) { :root { --topbar-h: 46px; } }
+
+    html, body {
+        height: 100%;
+        background: var(--color-bg);
+        color: var(--color-ink);
+        font-family: var(--font-sans);
+        font-size: 15.5px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+    }
+
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--color-edge2); border-radius: 2px; }
+}
+
+/* ─── COMPONENTS ──────────────────────────────────────────────────────────
+   Three kinds of rule earn a class here instead of utilities in markup:
+
+     1. Descendant state toggled from JS — .form-locked, .tbl-locked,
+        .app-locked and .sidebar.open style their *children*, which a
+        utility on the child cannot express.
+     2. Pseudo-elements — .pulse-dot, .pipeline-card and the error bullets
+        all draw with ::before.
+     3. Markup built in JS and rendered server-side from the same shape —
+        buildRow()/buildParams() in index.html mirror _params.html and the
+        sample <table>. A class keeps one source of truth; inlining
+        utilities would mean editing two files in lockstep.
+
+   Everything else is a utility in the template.                           */
+@layer components {
+
+    /* ── status dot ─────────────────────────────────────────────── */
+    .pulse-dot { @apply relative size-2 shrink-0; }
+    .pulse-dot::before {
+        content: '';
+        @apply absolute inset-0 rounded-full bg-green animate-pulse-ring;
+    }
+    .pulse-dot::after {
+        content: '';
+        @apply absolute inset-px rounded-full bg-green;
+    }
+    /* Nextflow missing: red and still, so it never reads as "fine". */
+    .pulse-dot.bad::before { @apply bg-red; animation: none; }
+    .pulse-dot.bad::after  { @apply bg-red; }
+
+    /* ── run / stop ─────────────────────────────────────────────── */
+    #run-btn {
+        @apply inline-flex items-center gap-1 rounded border border-accent
+               bg-transparent px-5 py-[7px] font-mono text-xs font-medium
+               tracking-[0.3px] text-accent cursor-pointer
+               transition-[background-color,color] duration-150;
+    }
+    #run-btn:hover:not(:disabled) { @apply bg-accent text-white; }
+    #run-btn:disabled { @apply border-edge2 text-ink-dim cursor-not-allowed; }
+    #run-btn.running  { @apply border-amber text-amber; }
+
+    #cancel-btn {
+        @apply hidden items-center gap-1 rounded border border-red
+               bg-transparent px-4 py-[7px] font-mono text-xs text-red
+               cursor-pointer transition-[background-color,color] duration-150;
+    }
+    #cancel-btn:hover { @apply bg-red text-white; }
+
+    /* ── buttons ────────────────────────────────────────────────── */
+    .btn {
+        @apply cursor-pointer whitespace-nowrap rounded border border-edge2
+               bg-transparent px-3.5 py-1.5 font-mono text-[11px] text-ink-muted
+               transition-[background-color,color,border-color] duration-100;
+    }
+    .btn:hover         { @apply bg-surface2 text-ink border-edge2; }
+    .btn-primary       { @apply border-accent-dim text-accent; }
+    .btn-primary:hover { @apply border-accent bg-accent text-white; }
+    .btn-success       { @apply border-green-dim text-green; }
+    .btn-success:hover { @apply border-green bg-green text-white; }
+    .btn-edit          { @apply hidden border-amber text-amber; }
+    .btn-edit:hover    { @apply bg-amber text-white; }
+
+    /* ── fields ─────────────────────────────────────────────────── */
+    .field-wrap  { @apply flex flex-col gap-[5px]; }
+    .field-wrap.full { @apply col-span-full; }
+    .field-label {
+        @apply font-mono text-[11px] uppercase tracking-[0.4px] text-ink-mid;
+    }
+    input[type="text"].fi,
+    input[type="number"].fi,
+    input[type="email"].fi {
+        @apply w-full rounded border border-edge2 bg-surface px-2.5 py-[7px]
+               font-mono text-xs text-ink outline-none
+               transition-[border-color] duration-100;
+    }
+    input[type="text"].fi:focus,
+    input[type="number"].fi:focus { @apply border-accent; }
+
+    .check-row  { @apply mt-1 flex flex-wrap gap-4; }
+    .check-item {
+        @apply flex cursor-pointer items-center gap-1.5 font-mono
+               text-[11px] text-ink-muted;
+    }
+    .check-item input[type="checkbox"] {
+        @apply size-[13px];
+        accent-color: var(--color-accent);
+    }
+
+    /* Locked form: an ancestor class dimming its descendants. */
+    .form-locked input,
+    .form-locked select {
+        @apply bg-surface2! text-ink-dim! border-edge! pointer-events-none select-none;
+    }
+    .form-locked input[type="checkbox"] { @apply pointer-events-none opacity-60; }
+    .form-locked .check-item { @apply pointer-events-none cursor-default opacity-60; }
+    .form-locked .btn[type="submit"] { @apply hidden; }
+
+    /* ── validation errors ──────────────────────────────────────── */
+    .error-list {
+        @apply mt-3 hidden rounded border border-red-dim border-l-[3px]
+               border-l-red bg-red-bg px-3.5 py-2.5;
+    }
+    .error-list.show { @apply block; }
+    .error-list-header {
+        @apply mb-1.5 font-mono text-[10px] font-medium uppercase
+               tracking-[0.5px] text-red;
+    }
+    .error-list ul { @apply flex list-none flex-col gap-[3px]; }
+    .error-list ul li {
+        @apply relative pl-3 font-mono text-[11px] text-red-deep;
+    }
+    .error-list ul li::before { content: '×'; @apply absolute left-0 text-red; }
+
+    /* ── sample table ───────────────────────────────────────────── */
+    table.samples { @apply w-full border-collapse font-mono text-[11px]; }
+    table.samples thead th {
+        @apply sticky top-0 whitespace-nowrap border-b border-edge bg-surface
+               px-3 py-2 text-left text-[9px] uppercase tracking-[0.8px] text-ink-dim;
+    }
+    table.samples tbody td { @apply border-b border-edge bg-bg px-1.5 py-1; }
+    table.samples tbody tr:hover td { @apply bg-surface; }
+    table.samples tbody tr:last-child td { @apply border-b-0; }
+    table.samples tbody td input {
+        @apply w-full border-none bg-transparent px-1 py-0.5 font-mono
+               text-[11px] text-ink outline-none;
+    }
+    table.samples tbody td input:focus { @apply rounded-sm bg-surface2; }
+    table.samples tbody td input[type="date"] { @apply cursor-pointer; color-scheme: light; }
+    table.samples tbody td input:invalid { box-shadow: inset 2px 0 0 var(--color-red); }
+
+    /* Locked table */
+    .tbl-locked table.samples tbody td input { @apply pointer-events-none text-ink-dim; }
+    .tbl-locked table.samples tbody td { @apply bg-surface2; }
+    .tbl-locked .del-btn { @apply hidden; }
+
+    .del-btn {
+        @apply cursor-pointer border-none bg-none px-1 font-mono text-base
+               leading-none text-ink-dim transition-colors duration-100;
+    }
+    .del-btn:hover { @apply text-red; }
+
+    /* ── terminal (lines injected as innerHTML) ─────────────────── */
+    .terminal {
+        @apply h-[260px] overflow-auto rounded-md border border-edge bg-term
+               px-[18px] py-4 font-mono text-xs leading-[1.8] text-term-text
+               max-compact:h-[200px] max-compact:px-3.5 max-compact:py-3;
+        white-space: pre;
+    }
+    .terminal .t-blue  { @apply text-term-blue; }
+    .terminal .t-green { @apply text-term-green; }
+    .terminal .t-amber { @apply text-term-amber; }
+    .terminal .t-red   { @apply text-term-red; }
+    .terminal .t-dim   { @apply text-term-dim; }
+
+    /* ── toasts (created in JS) ─────────────────────────────────── */
+    .toast {
+        @apply flex items-center gap-2 rounded border border-edge2 bg-surface2
+               px-4 py-[9px] font-mono text-[11px] text-ink animate-slide-in
+               max-compact:w-full;
+    }
+    .toast.ok  { @apply border-green-dim text-green; }
+    .toast.err { @apply border-red-deep text-red; }
+
+    /* ── app lock ───────────────────────────────────────────────── */
+    /* Lock everything... */
+    .app-locked .section,
+    .app-locked .sidebar-section {
+        @apply pointer-events-none select-none opacity-45;
+    }
+    /* ...EXCEPT the terminal section and the stop button */
+    .app-locked #cancel-btn,
+    .app-locked .section:has(.terminal) {
+        @apply pointer-events-auto select-auto opacity-100;
+    }
+}
+
+@layer components {
+    /* ── sidebar drawer ─────────────────────────────────────────────
+       Below the tablet tier the sidebar leaves the grid and becomes a
+       slide-in drawer. The open state is toggled from JS, so the
+       transform pair has to live in CSS rather than in markup.        */
+    .sidebar {
+        @apply flex flex-col overflow-y-auto border-r border-edge bg-surface py-4;
+    }
+    @media (max-width: 900px) {
+        .sidebar {
+            @apply fixed bottom-0 left-0 z-60 w-[260px] max-w-[82vw]
+                   -translate-x-full transition-transform duration-200 ease-out;
+            top: var(--topbar-h);
+            box-shadow: 4px 0 20px rgba(13, 17, 23, 0.2);
+        }
+        .sidebar.open { @apply translate-x-0; }
+    }
+
+    .sidebar-backdrop {
+        @apply fixed inset-0 z-55 hidden bg-ink/40;
+        top: var(--topbar-h);
+    }
+    .sidebar-backdrop.show { @apply block; }
+
+    .nav-item {
+        @apply flex cursor-pointer items-center gap-[9px] rounded border
+               border-transparent px-2 py-[7px] text-[13px] text-ink-muted
+               no-underline transition-[background-color,color] duration-100;
+    }
+    .nav-item:hover  { @apply bg-surface2 text-ink; }
+    .nav-item.active { @apply border-accent-dim bg-accent-glow text-accent; }
+    .nav-icon        { @apply size-3.5 shrink-0 opacity-70; }
+    .nav-item.active .nav-icon { @apply opacity-100; }
+
+    .stat-value        { @apply font-mono text-[22px] font-medium leading-none text-ink; }
+    .stat-value.has-data { @apply text-green; }   /* green when > 0 */
+
+    .pipe-indicator {
+        @apply size-1.5 shrink-0 rounded-full bg-ink-dim
+               transition-colors duration-200;
+    }
+    .pipe-indicator.active { @apply bg-accent; }
+
+    .sample-count           { @apply font-mono text-[10px] text-ink-dim; }
+    .sample-count.validated { @apply text-green; }
+
+    /* ── step markers ───────────────────────────────────────────── */
+    .step-num {
+        @apply flex size-[22px] shrink-0 items-center justify-center rounded-full
+               border border-accent-dim bg-accent-glow font-mono text-[11px]
+               font-medium text-accent;
+    }
+    .step-num.done { @apply border-green-dim bg-green-bg text-green; }
+
+    /* ── pipeline cards ─────────────────────────────────────────── */
+    .pipeline-card {
+        @apply relative cursor-pointer overflow-hidden rounded-md border
+               border-edge bg-surface p-3.5
+               transition-[border-color,background-color] duration-150;
+    }
+    .pipeline-card::before {
+        content: '';
+        @apply absolute inset-0 bg-accent-glow opacity-0
+               transition-opacity duration-150;
+    }
+    .pipeline-card:hover { @apply border-edge2; }
+    .pipeline-card:hover::before { @apply opacity-50; }
+    .pipeline-card.selected { @apply border-accent bg-surface2; }
+    .pipeline-card.selected::before { @apply opacity-100; }
+
+    .pipe-name { @apply mb-1 font-mono text-xs font-medium text-ink; }
+    .pipeline-card.selected .pipe-name { @apply text-accent; }
+}
+
+@layer components {
+    /* Grid shell. Kept as a class for the 100vh→100dvh fallback: both
+       declarations must land on one rule in source order, which two
+       competing height utilities in a class attribute cannot guarantee. */
+    .shell {
+        @apply grid overflow-hidden
+               grid-cols-[200px_1fr] grid-rows-[var(--topbar-h)_1fr]
+               max-laptop:grid-cols-[168px_1fr] max-tablet:grid-cols-1;
+        height: 100vh;
+        /* dvh accounts for mobile browser chrome resizing the viewport. */
+        height: 100dvh;
+    }
+
+    /* iOS Safari zooms the page in on focusing any text input under 16px;
+       these run smaller for density on larger screens, so bump them back
+       up on phones. */
+    @media (max-width: 600px) {
+        input[type="text"].fi,
+        input[type="number"].fi,
+        input[type="email"].fi,
+        table.samples tbody td input { @apply text-base; }
+    }
+
+    /* Icon-only run/stop on the smallest tier (the label span is hidden
+       in markup); tighten the padding to match. */
+    @media (max-width: 480px) {
+        #run-btn, #cancel-btn { @apply px-2.5 py-2; }
+    }
+}
