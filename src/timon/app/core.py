@@ -4,6 +4,7 @@ import shutil
 from functools import lru_cache
 from typing import Optional
 from .config import PIPELINES, Config
+from .params import param_defaults
 from ..paths import genes_db, genomes_db, missing_reference_data
 
 SAMPLES = []
@@ -77,8 +78,10 @@ class ExpConfig:
         if pipeline_id not in PIPELINES:
             return False
         self._config["current_pipeline"] = pipeline_id
-        pipe = PIPELINES[pipeline_id]
-        self._config["params"] = {p["id"]: p["default"] for p in pipe.get("params", [])}
+        # Left empty rather than pre-filled with defaults: the form renders
+        # the declared defaults itself, and saving it writes every value back
+        # here, so pre-filling would only be a second copy to keep in step.
+        self._config["params"] = {}
         return True
 
     def update(self, **kwargs):
@@ -164,10 +167,17 @@ class WorkflowSubprocess:
             if val:
                 cmd.extend([DB_FLAGS[db_key], val])
 
+        # Only what the pipeline does not already default to is worth putting
+        # on the command line: a flag whose default is false is set by naming it,
+        # but one that defaults to *true* can only be turned off explicitly.
+        # (Nextflow parses the string "false" back into a boolean.)
+        defaults = param_defaults(pipe)
         for k, v in config_dict["params"].items():
             if isinstance(v, bool):
                 if v:
                     cmd.append(f"--{k}")
+                elif defaults.get(k) is True:
+                    cmd.extend([f"--{k}", "false"])
             elif v is not None and str(v).strip() != "":
                 cmd.extend([f"--{k}", str(v)])
 
