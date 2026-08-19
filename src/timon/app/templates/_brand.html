@@ -1,0 +1,15 @@
+{# The logo. The wheel is drawn live rather than baked into the image so it
+   can turn (see .brand-mark in app.css); the wordmark stays a PNG, being
+   lettering rather than something that moves.
+
+   Included in both the sidebar and the topbar, which is why it carries no
+   id: the script drives every .wheel on the page at once. Sized by
+   --brand-h on whichever element places it. #}
+<span class="brand-mark">
+    <span class="wheel" aria-hidden="true">
+        <span class="wheel-frame wheel-a"></span>
+        <span class="wheel-frame wheel-b"></span>
+    </span>
+    <img class="brand-word" alt=""
+         src="{{ url_for('static', filename='img/timon_wordmark.png') }}">
+</span>
