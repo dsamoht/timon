@@ -1,13 +1,16 @@
 .venv
 uv.lock
 
-# Reference data — downloaded with `timon fetch-db`, never committed
+# Reference data — too large to commit; point TIMON_DB_DIR at it
 data/
 
 # Runtime scratch
 imports/
 work/
 .nextflow*
+
+# Node toolchain — dev-only; the built stylesheet is committed
+node_modules/
 
 # Build artefacts
 build/

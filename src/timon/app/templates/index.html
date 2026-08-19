@@ -4,931 +4,47 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>timon — local microbiomics analysis</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style/app.css') }}">
 
-    <style>
-        /* ─── TOKENS ─────────────────────────────────────────────── */
-        :root {
-            --bg:        #f0f2f6;
-            --surface:   #ffffff;
-            --surface2:  #e8ebf0;
-            /* Every value below clears WCAG AA against all three surfaces
-               (--surface, --bg, --surface2): 4.5:1 for text, 3:1 for the
-               borders that delineate cards, inputs and other controls. */
-            --border:    #7b8494;   /* 3.15:1 worst case */
-            --border2:   #6b7482;   /* 3.95:1 */
-            --text:      #0d1117;   /* 15.84:1 */
-            --text-dim:  #374151;   /*  8.63:1 */
-            --text-mid:  #2d3748;   /* 10.03:1 */
-            --text-muted:#5f6875;   /*  4.72:1 — secondary labels and buttons */
-            --accent:    #1d4ed8;   /*  5.61:1 */
-            --accent-dim:#bfdbfe;
-            --accent-glow:rgba(29,78,216,.07);
-            --green:     #166534;   /*  5.97:1 */
-            --green-dim: #bbf7d0;
-            --amber:     #92400e;   /*  5.93:1 */
-            --red:       #b91c1c;   /*  5.41:1 */
-            --red-dim:   #fecaca;
-            --mono: 'IBM Plex Mono', monospace;
-            --sans: 'IBM Plex Sans', sans-serif;
-            --topbar-h: 80px;
-        }
-
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-        html, body {
-            height: 100%;
-            background: var(--bg);
-            color: var(--text);
-            font-family: var(--sans);
-            font-size: 15.5px;
-            line-height: 1.6;
-            -webkit-font-smoothing: antialiased;
-        }
-
-        /* ─── SCROLLBAR ──────────────────────────────────────────── */
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
-
-        /* ─── LAYOUT ─────────────────────────────────────────────── */
-        .shell {
-            display: grid;
-            grid-template-columns: 200px 1fr;
-            grid-template-rows: var(--topbar-h) 1fr;
-            height: 100vh;
-            /* dvh accounts for mobile browser chrome (address bar etc.)
-               resizing the viewport; falls back to vh where unsupported. */
-            height: 100dvh;
-            overflow: hidden;
-        }
-
-        /* ─── TOPBAR ─────────────────────────────────────────────── */
-        .topbar {
-            grid-column: 1 / -1;
-            display: flex;
-            align-items: center;
-            padding: 0 20px;
-            gap: 14px;
-            border-bottom: 1px solid var(--border);
-            background: var(--surface);
-        }
-
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            text-decoration: none;
-        }
-        
-        .brand-mark {
-            height: 72px;
-            flex-shrink: 0;
-        }
-        
-        .brand-mark img {
-            height: 100%;
-            width: auto;
-            object-fit: contain;
-        }
-
-        .brand-name {
-            font-family: var(--mono);
-            font-size: 15px;
-            font-weight: 500;
-            color: #fff;
-            letter-spacing: -0.5px;
-        }
-        .brand-name span { color: var(--accent); }
-
-        .topbar-divider {
-            width: 1px; height: 20px;
-            background: var(--border2);
-        }
-
-        .version-tag {
-            font-family: var(--mono);
-            font-size: 16px;
-            color: var(--text-dim);
-            letter-spacing: 0.5px;
-        }
-
-        .topbar-right {
-            margin-left: auto;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            /* The run/stop buttons must stay reachable when the bar is tight. */
-            min-width: 0;
-            flex-shrink: 0;
-        }
-
-        .pulse-dot {
-            position: relative;
-            width: 8px; height: 8px;
-            flex-shrink: 0;
-        }
-        .pulse-dot::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            border-radius: 50%;
-            background: var(--green);
-            animation: pulse-ring 2s ease infinite;
-        }
-        .pulse-dot::after {
-            content: '';
-            position: absolute;
-            inset: 1px;
-            border-radius: 50%;
-            background: var(--green);
-        }
-        /* Nextflow missing: red and still, so it never reads as "fine". */
-        .pulse-dot.bad::before {
-            background: var(--red);
-            animation: none;
-        }
-        .pulse-dot.bad::after { background: var(--red); }
-        /* Ring colour tracks --green (#166534); kept literal because
-           box-shadow needs an alpha channel. */
-        @keyframes pulse-ring {
-            0%   { box-shadow: 0 0 0 0 rgba(22,101,52,.5); }
-            70%  { box-shadow: 0 0 0 6px rgba(22,101,52,0); }
-            100% { box-shadow: 0 0 0 0 rgba(22,101,52,0); }
-        }
-
-        .status-text {
-            font-family: var(--mono);
-            font-size: 11px;
-            color: var(--text-dim);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 26ch;
-        }
-
-        #run-btn {
-            font-family: var(--mono);
-            font-size: 12px;
-            font-weight: 500;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            padding: 7px 20px;
-            border-radius: 4px;
-            border: 1px solid var(--accent);
-            background: transparent;
-            color: var(--accent);
-            cursor: pointer;
-            letter-spacing: 0.3px;
-            transition: background 0.15s, color 0.15s;
-        }
-        #run-btn:hover:not(:disabled) {
-            background: var(--accent);
-            color: #fff;
-        }
-        #run-btn:disabled {
-            border-color: var(--border2);
-            color: var(--text-dim);
-            cursor: not-allowed;
-        }
-        #run-btn.running {
-            border-color: var(--amber);
-            color: var(--amber);
-        }
-
-        #cancel-btn {
-            display: none;
-            align-items: center;
-            gap: 4px;
-            font-family: var(--mono);
-            font-size: 12px;
-            padding: 7px 16px;
-            border-radius: 4px;
-            border: 1px solid var(--red);
-            background: transparent;
-            color: var(--red);
-            cursor: pointer;
-            transition: background 0.15s, color 0.15s;
-        }
-        #cancel-btn:hover { background: var(--red); color: #fff; }
-
-        /* ─── SIDEBAR ────────────────────────────────────────────── */
-        .sidebar {
-            border-right: 1px solid var(--border);
-            background: var(--surface);
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
-            padding: 16px 0;
-        }
-
-        .sidebar-section {
-            padding: 0 12px;
-            margin-bottom: 20px;
-        }
-
-        .sidebar-label {
-            font-family: var(--mono);
-            font-size: 11px;
-            letter-spacing: 1px;
-            color: var(--text-mid);
-            text-transform: uppercase;
-            padding: 0 4px;
-            margin-bottom: 6px;
-        }
-
-        .nav-item {
-            display: flex;
-            align-items: center;
-            gap: 9px;
-            padding: 7px 8px;
-            border-radius: 4px;
-            font-size: 13px;
-            color: var(--text-muted);
-            cursor: pointer;
-            border: 1px solid transparent;
-            transition: background 0.12s, color 0.12s;
-            text-decoration: none;
-        }
-        .nav-item:hover { background: var(--surface2); color: var(--text); }
-        .nav-item.active {
-            background: var(--accent-glow);
-            color: var(--accent);
-            border-color: var(--accent-dim);
-        }
-        .nav-icon { width: 14px; height: 14px; flex-shrink: 0; opacity: .7; }
-        .nav-item.active .nav-icon { opacity: 1; }
-
-        .stat-card {
-            background: var(--surface2);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            padding: 10px 12px;
-            margin-bottom: 8px;
-        }
-        .stat-label {
-            font-family: var(--mono);
-            font-size: 10px;
-            letter-spacing: 0.6px;
-            color: var(--text-mid);
-            text-transform: uppercase;
-            margin-bottom: 3px;
-        }
-        .stat-value {
-            font-family: var(--mono);
-            font-size: 22px;
-            font-weight: 500;
-            color: var(--text);
-            line-height: 1;
-        }
-        /* Green when > 0 */
-        .stat-value.has-data { color: var(--green); }
-        .stat-sub {
-            font-size: 11px;
-            color: var(--text-dim);
-            margin-top: 2px;
-        }
-
-        .pipe-badge {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 10px;
-            background: var(--surface2);
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            font-family: var(--mono);
-            font-size: 11px;
-            color: var(--text-muted);
-        }
-        .pipe-indicator {
-            width: 6px; height: 6px;
-            border-radius: 50%;
-            background: var(--text-dim);
-            flex-shrink: 0;
-            transition: background 0.2s;
-        }
-        .pipe-indicator.active { background: var(--accent); }
-
-        /* ─── MOBILE MENU TOGGLE ─────────────────────────────────── */
-        /* Hidden on docked-sidebar layouts; shown once the sidebar becomes
-           a drawer (see the ≤900px tier below). */
-        .menu-btn {
-            display: none;
-            align-items: center;
-            justify-content: center;
-            width: 32px; height: 32px;
-            border-radius: 4px;
-            border: 1px solid transparent;
-            background: transparent;
-            color: var(--text-muted);
-            cursor: pointer;
-            flex-shrink: 0;
-        }
-        .menu-btn:hover { background: var(--surface2); color: var(--text); }
-        .menu-btn svg { width: 16px; height: 16px; }
-
-        .sidebar-backdrop {
-            display: none;
-            position: fixed;
-            inset: 0;
-            top: var(--topbar-h);
-            background: rgba(13, 17, 23, 0.4);
-            z-index: 55;
-        }
-        .sidebar-backdrop.show { display: block; }
-
-        /* ─── MAIN ───────────────────────────────────────────────── */
-        .main {
-            overflow-y: auto;
-            background: var(--bg);
-            display: flex;
-            flex-direction: column;
-            /* Grid items default to min-width:auto, so a wide child (the card
-               row, the sample table) pushes this track past the viewport and
-               .shell's overflow:hidden clips it with no way to scroll back.
-               Allowing it to shrink lets inner overflow-x containers scroll. */
-            min-width: 0;
-        }
-
-        /* ─── SECTION ────────────────────────────────────────────── */
-        .section {
-            border-bottom: 1px solid var(--border);
-            padding: 20px 24px;
-        }
-
-        .section-head {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 16px;
-        }
-
-        .step-num {
-            font-family: var(--mono);
-            font-size: 11px;
-            font-weight: 500;
-            width: 22px; height: 22px;
-            border-radius: 50%;
-            border: 1px solid var(--accent-dim);
-            background: var(--accent-glow);
-            color: var(--accent);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-        }
-        /* Completed step indicator */
-        .step-num.done {
-            border-color: var(--green-dim);
-            background: #f0fdf4;
-            color: var(--green);
-        }
-
-        .section-title {
-            font-family: var(--sans);
-            font-size: 15px;
-            font-weight: 500;
-            letter-spacing: -0.2px;
-            color: var(--text);
-            text-transform: none;
-        }
-
-        .section-actions {
-            margin-left: auto;
-            display: flex;
-            gap: 6px;
-        }
-
-        /* ─── PIPELINE CARDS ─────────────────────────────────────── */
-        .pipeline-grid {
-            display: grid;
-            /* Wrap rather than squeeze: three fixed columns overflowed the
-               viewport on anything narrower than ~1500px. */
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 10px;
-        }
-
-        .pipeline-card {
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 14px;
-            cursor: pointer;
-            background: var(--surface);
-            transition: border-color 0.15s, background 0.15s;
-            position: relative;
-            overflow: hidden;
-        }
-        .pipeline-card::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: var(--accent-glow);
-            opacity: 0;
-            transition: opacity 0.15s;
-        }
-        .pipeline-card:hover { border-color: var(--border2); }
-        .pipeline-card:hover::before { opacity: 0.5; }
-        .pipeline-card.selected {
-            border-color: var(--accent);
-            background: var(--surface2);
-        }
-        .pipeline-card.selected::before { opacity: 1; }
-
-        .pipe-icon {
-            width: 68px; height: 68px;
-            border-radius: 6px;
-            border: 1px solid var(--border2);
-            background: var(--surface2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            margin-bottom: 10px;
-        }
-        .pipe-icon img {
-            width: 100%; height: 100%;
-            object-fit: cover;
-        }
-        .pipe-icon span { font-size: 34px; }
-
-        .pipe-name {
-            font-family: var(--mono);
-            font-size: 12px;
-            font-weight: 500;
-            color: var(--text);
-            margin-bottom: 4px;
-        }
-        .pipeline-card.selected .pipe-name { color: var(--accent); }
-
-        .pipe-desc {
-            font-size: 11px;
-            color: var(--text-dim);
-            line-height: 1.5;
-        }
-
-        .pipeline-card.selected { opacity: 1; }
-
-        /* ─── FORMS ──────────────────────────────────────────────── */
-        .form-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 12px;
-        }
-        .form-grid.cols-3 {
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        }
-
-        .field-wrap { display: flex; flex-direction: column; gap: 5px; }
-        .field-wrap.full { grid-column: 1 / -1; }
-
-        .field-label {
-            font-family: var(--mono);
-            font-size: 11px;
-            letter-spacing: 0.4px;
-            color: var(--text-mid);
-            text-transform: uppercase;
-        }
-
-        input[type="text"].fi,
-        input[type="number"].fi,
-        input[type="email"].fi {
-            background: var(--surface);
-            border: 1px solid var(--border2);
-            border-radius: 4px;
-            color: var(--text);
-            font-family: var(--mono);
-            font-size: 12px;
-            padding: 7px 10px;
-            outline: none;
-            transition: border-color 0.12s;
-            width: 100%;
-        }
-        input[type="text"].fi:focus,
-        input[type="number"].fi:focus {
-            border-color: var(--accent);
-        }
-        input.fi.is-valid {
-            border-color: var(--green);
-            background: #f0fdf4;
-        }
-        input.fi.is-invalid {
-            border-color: var(--red);
-            background: #fef2f2;
-        }
-        /* Locked/saved form state */
-        .form-locked input,
-        .form-locked select {
-            background: var(--surface2) !important;
-            color: var(--text-dim) !important;
-            border-color: var(--border) !important;
-            pointer-events: none;
-            user-select: none;
-        }
-        .form-locked input[type="checkbox"] {
-            pointer-events: none;
-            opacity: 0.6;
-        }
-        .form-locked .check-item {
-            pointer-events: none;
-            opacity: 0.6;
-            cursor: default;
-        }
-        .form-locked .btn[type="submit"] { display: none; }
-
-        .field-hint {
-            font-family: var(--mono);
-            font-size: 10px;
-            margin-top: 3px;
-            display: none;
-        }
-        .field-hint.show { display: block; }
-        .field-hint.ok  { color: var(--green); }
-        .field-hint.err { color: var(--red); }
-
-        .check-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 16px;
-            margin-top: 4px;
-        }
-        .check-item {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            cursor: pointer;
-            font-family: var(--mono);
-            font-size: 11px;
-            color: var(--text-muted);
-        }
-        .check-item input[type="checkbox"] {
-            accent-color: var(--accent);
-            width: 13px; height: 13px;
-        }
-
-        /* ─── VALIDATION ERRORS ──────────────────────────────────── */
-        .error-list {
-            margin-top: 12px;
-            border: 1px solid var(--red-dim);
-            border-left: 3px solid var(--red);
-            border-radius: 4px;
-            background: #fff5f5;
-            padding: 10px 14px;
-            display: none;
-        }
-        .error-list.show { display: block; }
-        .error-list-header {
-            font-family: var(--mono);
-            font-size: 10px;
-            font-weight: 500;
-            letter-spacing: 0.5px;
-            color: var(--red);
-            text-transform: uppercase;
-            margin-bottom: 6px;
-        }
-        .error-list ul {
-            list-style: none;
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-        }
-        .error-list ul li {
-            font-family: var(--mono);
-            font-size: 11px;
-            color: #7f1d1d;
-            padding-left: 12px;
-            position: relative;
-        }
-        .error-list ul li::before {
-            content: '×';
-            position: absolute;
-            left: 0;
-            color: var(--red);
-        }
-
-        /* ─── BUTTONS ────────────────────────────────────────────── */
-        .btn {
-            font-family: var(--mono);
-            font-size: 11px;
-            padding: 6px 14px;
-            border-radius: 4px;
-            cursor: pointer;
-            border: 1px solid var(--border2);
-            background: transparent;
-            color: var(--text-muted);
-            transition: background 0.12s, color 0.12s, border-color 0.12s;
-            white-space: nowrap;
-        }
-        .btn:hover { background: var(--surface2); color: var(--text); border-color: var(--border2); }
-        .btn-primary {
-            border-color: var(--accent-dim);
-            color: var(--accent);
-        }
-        .btn-primary:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
-        .btn-success {
-            border-color: var(--green-dim);
-            color: var(--green);
-        }
-        .btn-success:hover { background: var(--green); color: #fff; border-color: var(--green); }
-        .btn-edit {
-            border-color: var(--amber);
-            color: var(--amber);
-            display: none;
-        }
-        .btn-edit:hover { background: var(--amber); color: #fff; }
-
-        /* ─── TABLE ──────────────────────────────────────────────── */
-        .tbl-wrap {
-            overflow-x: auto;
-            max-height: 200px;
-            overflow-y: auto;
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            margin-top: 12px;
-        }
-
-        table.samples {
-            width: 100%;
-            border-collapse: collapse;
-            font-family: var(--mono);
-            font-size: 11px;
-        }
-        table.samples thead th {
-            text-align: left;
-            padding: 8px 12px;
-            font-size: 9px;
-            letter-spacing: 0.8px;
-            text-transform: uppercase;
-            color: var(--text-dim);
-            background: var(--surface);
-            border-bottom: 1px solid var(--border);
-            position: sticky;
-            top: 0;
-            white-space: nowrap;
-        }
-        table.samples tbody td {
-            padding: 4px 6px;
-            border-bottom: 1px solid var(--border);
-            background: var(--bg);
-        }
-        table.samples tbody tr:hover td { background: var(--surface); }
-        table.samples tbody tr:last-child td { border-bottom: none; }
-        table.samples tbody td input {
-            background: transparent;
-            border: none;
-            outline: none;
-            color: var(--text);
-            font-family: var(--mono);
-            font-size: 11px;
-            width: 100%;
-            padding: 2px 4px;
-        }
-        table.samples tbody td input:focus {
-            background: var(--surface2);
-            border-radius: 2px;
-        }
-        table.samples tbody td input[type="date"] {
-            color-scheme: light;
-            cursor: pointer;
-        }
-        table.samples tbody td input:invalid {
-            box-shadow: inset 2px 0 0 var(--red);
-        }
-        /* Locked table */
-        .tbl-locked table.samples tbody td input {
-            pointer-events: none;
-            color: var(--text-dim);
-        }
-        .tbl-locked .del-btn { display: none; }
-        .tbl-locked table.samples tbody td { background: var(--surface2); }
-
-        .del-btn {
-            background: none;
-            border: none;
-            color: var(--text-dim);
-            cursor: pointer;
-            font-size: 16px;
-            line-height: 1;
-            padding: 0 4px;
-            font-family: var(--mono);
-            transition: color 0.12s;
-        }
-        .del-btn:hover { color: var(--red); }
-
-        .tbl-footer {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-top: 10px;
-        }
-        .sample-count {
-            font-family: var(--mono);
-            font-size: 10px;
-            color: var(--text-dim);
-        }
-        .sample-count.validated {
-            color: var(--green);
-        }
-
-        /* ─── TERMINAL ───────────────────────────────────────────── */
-        .terminal {
-            background: #1a1f2b;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 16px 18px;
-            font-family: var(--mono);
-            font-size: 12px;
-            line-height: 1.8;
-            height: 260px;
-            overflow-y: auto;
-            overflow-x: auto;
-            color: #c9d5e8;
-            white-space: pre;
-        }
-        .terminal .t-blue   { color: #60a5fa; }
-        .terminal .t-green  { color: #4ade80; }
-        .terminal .t-amber  { color: #fbbf24; }
-        .terminal .t-red    { color: #f87171; }
-        /* 4.84:1 on the terminal's #1a1f2b — still clearly dimmer than the
-           #c9d5e8 body text (11.11:1), but readable. Was #4a5568 at 2.19:1. */
-        .terminal .t-dim    { color: #7d8ca6; }
-        .terminal .t-bright { color: #e2e8f0; }
-
-        /* ─── APP LOCK ───────────────────────────────────────────── */
-        /* Lock everything... */
-        .app-locked .section,
-        .app-locked .sidebar-section:not(.always-on) {
-            pointer-events: none;
-            opacity: 0.45;
-            user-select: none;
-        }
-
-        /* ...EXCEPT the terminal section and the stop button */
-        .app-locked #cancel-btn,
-        .app-locked .section:has(.terminal) {
-            pointer-events: all;
-            opacity: 1;
-            user-select: auto;
-        }
-        /* ─── TOAST ──────────────────────────────────────────────── */
-        #toast-host {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        .toast {
-            font-family: var(--mono);
-            font-size: 11px;
-            padding: 9px 16px;
-            border-radius: 4px;
-            border: 1px solid var(--border2);
-            background: var(--surface2);
-            color: var(--text);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            animation: slide-in 0.2s ease;
-        }
-        .toast.ok  { border-color: var(--green-dim); color: var(--green); }
-        .toast.err { border-color: #7f1d1d; color: var(--red); }
-        @keyframes slide-in {
-            from { transform: translateX(30px); opacity: 0; }
-            to   { transform: translateX(0);    opacity: 1; }
-        }
-
-        /* ─── PARAMS SECTION ─────────────────────────────────────── */
-        #params-area {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 12px;
-        }
-
-        /* Form save row */
-        .form-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 8px;
-            margin-top: 14px;
-        }
-
-        /* ─── RESPONSIVE ─────────────────────────────────────────── */
-        /* Laptop (≤1200px): narrower docked sidebar. This is the ~1440x900
-           case where the run button used to sit partly off-screen.
-
-           Tablet/phone (≤900px): the sidebar leaves the grid and becomes a
-           slide-in drawer behind a hamburger toggle. A permanently docked
-           sidebar eats too much of a tablet-width viewport — and the old
-           behaviour here was just `display:none`, which stranded "reset
-           all" and the run stats with no way back in.
-
-           Phone (≤600px): compact the topbar further and fix iOS Safari's
-           input-zoom.  Small phone (≤480px): run/stop buttons drop their
-           text label and become icon-only. */
-        @media (max-width: 1200px) {
-            :root { --topbar-h: 64px; }
-            .shell      { grid-template-columns: 168px 1fr; }
-            .brand-mark { height: 56px; }
-            .section    { padding: 16px; }
-        }
-
-        @media (max-width: 900px) {
-            :root { --topbar-h: 56px; }
-            .shell { grid-template-columns: 1fr; }
-            /* Taking the sidebar out of flow (position:fixed, below) leaves
-               it out of grid auto-placement too, so .main would otherwise
-               be auto-placed into column 1 instead of the intended column. */
-            .main  { grid-column: 1; }
-
-            .menu-btn   { display: inline-flex; }
-            .brand-mark { height: 44px; }
-
-            .sidebar {
-                position: fixed;
-                top: var(--topbar-h);
-                left: 0;
-                bottom: 0;
-                width: 260px;
-                max-width: 82vw;
-                transform: translateX(-100%);
-                transition: transform 0.2s ease;
-                z-index: 60;
-                box-shadow: 4px 0 20px rgba(13, 17, 23, 0.2);
-            }
-            .sidebar.open { transform: translateX(0); }
-
-            .version-tag, .topbar-divider { display: none; }
-            .status-text { max-width: 14ch; }
-        }
-
-        @media (max-width: 600px) {
-            :root { --topbar-h: 52px; }
-            .brand-mark { height: 40px; }
-            .topbar     { padding: 0 12px; gap: 10px; }
-            .section    { padding: 12px; }
-            .terminal   { height: 200px; padding: 12px 14px; }
-            #toast-host { left: 12px; right: 12px; bottom: 12px; }
-            .toast      { width: 100%; }
-
-            /* iOS Safari zooms the whole page in on focusing any text
-               input under 16px; these run smaller for density on larger
-               screens, so bump them back up here. */
-            input[type="text"].fi,
-            input[type="number"].fi,
-            input[type="email"].fi,
-            table.samples tbody td input {
-                font-size: 16px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            :root { --topbar-h: 46px; }
-            .brand-mark  { height: 32px; }
-            .topbar      { padding: 0 10px; gap: 8px; }
-            .status-text { display: none; }
-
-            #run-btn, #cancel-btn { padding: 8px 10px; }
-            #run-btn .btn-label,
-            #cancel-btn .btn-label { display: none; }
-        }
-    </style>
 </head>
 <body>
 <div class="shell">
 
     <!-- ── TOPBAR ──────────────────────────────────────────────── -->
-    <header class="topbar">
-        <button id="menu-btn" class="menu-btn" type="button"
+    <header class="col-span-full flex items-center gap-3.5 border-b border-edge bg-surface px-5
+                   max-compact:gap-2.5 max-compact:px-3 max-phone:gap-2 max-phone:px-2.5">
+        <button id="menu-btn" type="button"
+                class="hidden size-8 shrink-0 cursor-pointer items-center justify-center rounded
+                       border border-transparent bg-transparent text-ink-muted
+                       hover:bg-surface2 hover:text-ink max-tablet:inline-flex"
                 aria-label="Toggle menu" aria-expanded="false" aria-controls="sidebar">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <svg class="size-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                 <line x1="1" y1="4" x2="15" y2="4"/>
                 <line x1="1" y1="8" x2="15" y2="8"/>
                 <line x1="1" y1="12" x2="15" y2="12"/>
             </svg>
         </button>
-        <a class="brand" href="#">
-            <div class="brand-mark">
-                <img src="{{ url_for('static', filename='img/timon_logo_light.png') }}" alt="timon">
+        <a class="flex items-center gap-2.5 no-underline" href="#">
+            <div class="h-[72px] shrink-0 max-laptop:h-14 max-tablet:h-11 max-compact:h-10 max-phone:h-8">
+                <img class="h-full w-auto object-contain"
+                     src="{{ url_for('static', filename='img/timon_logo_light.png') }}" alt="timon">
             </div>
         </a>
-        <div class="topbar-divider"></div>
-        <span class="version-tag">v{{ version }}</span>
+        <div class="h-5 w-px bg-edge2 max-tablet:hidden"></div>
+        <span class="font-mono text-base tracking-[0.5px] text-ink-dim max-tablet:hidden">v{{ version }}</span>
 
-        <div class="topbar-right">
+        <div class="ml-auto flex min-w-0 shrink-0 items-center gap-3">
             <div class="pulse-dot {{ 'ok' if nextflow.ok else 'bad' }}"
                  title="{{ nextflow.detail }}"></div>
-            <span class="status-text" title="{{ nextflow.detail }}">{{ nextflow.label }}</span>
+            <span class="max-w-[26ch] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px]
+                       text-ink-dim max-tablet:max-w-[14ch] max-phone:hidden"
+                  title="{{ nextflow.detail }}">{{ nextflow.label }}</span>
             <button id="cancel-btn" onclick="cancelRun()" aria-label="Stop workflow">
-                <span class="btn-icon">■</span><span class="btn-label"> stop</span>
+                <span class="btn-icon">■</span><span class="btn-label max-phone:hidden"> stop</span>
             </button>
             <button id="run-btn" aria-label="Run analysis"
                     {{ 'disabled' if not exp_config.exp_id or not exp_config.samplesheet or not nextflow.ok }}>
-                <span class="btn-icon">▶</span><span class="btn-label"> run analysis</span>
+                <span class="btn-icon">▶</span><span class="btn-label max-phone:hidden"> run analysis</span>
             </button>
         </div>
     </header>
@@ -936,8 +52,8 @@
     <!-- ── SIDEBAR ─────────────────────────────────────────────── -->
     <aside class="sidebar" id="sidebar">
 
-        <div class="sidebar-section">
-            <div class="sidebar-label">Navigation</div>
+        <div class="sidebar-section mb-5 px-3">
+            <div class="mb-1.5 px-1 font-mono text-[11px] uppercase tracking-[1px] text-ink-mid">Navigation</div>
             <a class="nav-item active" href="#">
                 <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                     <rect x="1" y="1" width="6" height="6" rx="1"/>
@@ -955,30 +71,32 @@
             </a>
         </div>
 
-        <div class="sidebar-section">
-            <div class="sidebar-label">Active pipeline</div>
-            <div class="pipe-badge" id="pipe-badge">
+        <div class="sidebar-section mb-5 px-3">
+            <div class="mb-1.5 px-1 font-mono text-[11px] uppercase tracking-[1px] text-ink-mid">Active pipeline</div>
+            <div id="pipe-badge"
+                 class="flex items-center gap-2 rounded border border-edge bg-surface2 px-2.5 py-2
+                        font-mono text-[11px] text-ink-muted">
                 <div class="pipe-indicator {{ 'active' if exp_config.current_pipeline }}" id="pipe-dot"></div>
                 <span id="pipe-label">{{ exp_config.current_pipeline or 'none' }}</span>
             </div>
         </div>
 
-        <div class="sidebar-section">
-            <div class="sidebar-label">Stats</div>
-            <div class="stat-card">
-                <div class="stat-label">samples ready</div>
+        <div class="sidebar-section mb-5 px-3">
+            <div class="mb-1.5 px-1 font-mono text-[11px] uppercase tracking-[1px] text-ink-mid">Stats</div>
+            <div class="mb-2 rounded border border-edge bg-surface2 px-3 py-2.5">
+                <div class="mb-[3px] font-mono text-[10px] uppercase tracking-[0.6px] text-ink-mid">samples ready</div>
                 <div class="stat-value {% if table_rows|length > 0 %}has-data{% endif %}" id="stat-samples">{{ table_rows|length }}</div>
             </div>
-            <div class="stat-card">
-                <div class="stat-label">run id</div>
-                <div class="stat-sub" id="stat-runid" style="font-family:var(--mono);font-size:11px;">
+            <div class="mb-2 rounded border border-edge bg-surface2 px-3 py-2.5">
+                <div class="mb-[3px] font-mono text-[10px] uppercase tracking-[0.6px] text-ink-mid">run id</div>
+                <div id="stat-runid" class="mt-0.5 font-mono text-[11px] text-ink-dim">
                     {{ exp_config.exp_id or '—' }}
                 </div>
             </div>
         </div>
 
-        <div class="sidebar-section" style="margin-top:auto;">
-            <button class="btn" style="width:100%;" onclick="resetAll()">reset all</button>
+        <div class="sidebar-section mt-auto mb-5 px-3">
+            <button class="btn w-full" onclick="resetAll()">reset all</button>
         </div>
 
     </aside>
@@ -986,45 +104,46 @@
     <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
     <!-- ── MAIN ────────────────────────────────────────────────── -->
-    <main class="main">
+    <main class="flex min-w-0 flex-col overflow-y-auto bg-bg max-tablet:col-start-1">
 
         <!-- 1. Select workflow -->
-        <div class="section">
-            <div class="section-head">
+        <div class="section border-b border-edge px-6 py-5 max-laptop:p-4 max-compact:p-3">
+            <div class="mb-4 flex items-center gap-2.5">
                 <div class="step-num">1</div>
-                <span class="section-title">Select workflow</span>
+                <span class="text-2xl/8 font-medium tracking-tighter text-balance text-ink">Select workflow</span>
             </div>
-            <div class="pipeline-grid">
+            <div class="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-2.5">
                 {% for pid, p in pipelines.items() %}
                 <div class="pipeline-card {{ 'selected' if exp_config.current_pipeline == pid }}"
                      data-pipe-id="{{ pid }}"
                      onclick="selectPipe('{{ pid }}')">
-                    <div class="pipe-icon">
+                    <div class="mb-2.5 flex size-[68px] items-center justify-center overflow-hidden
+                                rounded-md border border-edge2 bg-surface2">
                         {% if p.icon.endswith('.png') or p.icon.endswith('.svg') %}
-                            <img src="{{ url_for('static', filename=p.icon) }}" alt="{{ p.name }}">
+                            <img class="size-full object-cover" src="{{ url_for('static', filename=p.icon) }}" alt="{{ p.name }}">
                         {% else %}
-                            <span>{{ p.icon }}</span>
+                            <span class="text-[34px]">{{ p.icon }}</span>
                         {% endif %}
                     </div>
                     <div class="pipe-name">{{ p.name }}</div>
-                    <div class="pipe-desc">{{ p.description }}</div>
+                    <div class="text-[11px] leading-[1.5] text-ink-dim">{{ p.description }}</div>
                 </div>
                 {% endfor %}
             </div>
         </div>
 
         <!-- 2. Run configuration -->
-        <div class="section">
-            <div class="section-head">
+        <div class="section border-b border-edge px-6 py-5 max-laptop:p-4 max-compact:p-3">
+            <div class="mb-4 flex items-center gap-2.5">
                 <div class="step-num" id="step2-num">2</div>
-                <span class="section-title">Run configuration</span>
-                <div class="section-actions">
+                <span class="text-2xl/8 font-medium tracking-tighter text-balance text-ink">Run configuration</span>
+                <div class="ml-auto flex gap-1.5">
                     <button type="button" class="btn btn-edit" id="config-edit-btn"
                             onclick="unlockForm('config-form','config-edit-btn','step2-num')">edit</button>
                 </div>
             </div>
             <form id="config-form">
-                <div class="form-grid">
+                <div class="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
                     <div class="field-wrap">
                         <label class="field-label" for="exp-id">run identifier</label>
                         <input type="text" class="fi" id="exp-id" name="exp-id"
@@ -1033,9 +152,9 @@
                     </div>
                 </div>
 
-                <div style="margin-top:14px;">
-                    <div class="field-label" style="margin-bottom:10px;">pipeline parameters</div>
-                    <div id="params-area">
+                <div class="mt-3.5">
+                    <div class="field-label mb-2.5">pipeline parameters</div>
+                    <div id="params-area" class="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
                         {% include '_params.html' %}
                     </div>
                 </div>
@@ -1046,18 +165,18 @@
                     <ul id="config-error-list"></ul>
                 </div>
 
-                <div class="form-actions">
+                <div class="mt-3.5 flex justify-end gap-2">
                     <button type="submit" class="btn btn-primary">save configuration</button>
                 </div>
             </form>
         </div>
 
         <!-- 3. Sample sheet -->
-        <div class="section">
-            <div class="section-head">
+        <div class="section border-b border-edge px-6 py-5 max-laptop:p-4 max-compact:p-3">
+            <div class="mb-4 flex items-center gap-2.5">
                 <div class="step-num" id="step3-num">3</div>
-                <span class="section-title">Sample sheet</span>
-                <div class="section-actions">
+                <span class="text-2xl/8 font-medium tracking-tighter text-balance text-ink">Sample sheet</span>
+                <div class="ml-auto flex gap-1.5">
                     <button class="btn" id="scan-btn">
                         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="vertical-align:-1px;margin-right:4px;">
                             <path d="M2 4h12v10H2z"/><path d="M5 4V2h6v2"/>
@@ -1070,7 +189,7 @@
                 </div>
             </div>
             <form id="sample-form">
-                <div class="tbl-wrap" id="tbl-wrap">
+                <div id="tbl-wrap" class="mt-3 max-h-[200px] overflow-auto rounded border border-edge">
                     <table class="samples">
                         <thead id="sample-thead">
                             <tr>
@@ -1105,7 +224,7 @@
                     <ul id="sample-error-list"></ul>
                 </div>
 
-                <div class="tbl-footer">
+                <div class="mt-2.5 flex items-center justify-between">
                     <span class="sample-count" id="sample-count">{{ table_rows|length }} rows</span>
                     <button type="submit" class="btn btn-success" id="sample-save-btn">validate &amp; save</button>
                 </div>
@@ -1113,11 +232,11 @@
         </div>
 
         <!-- 4. Terminal -->
-        <div class="section" style="flex:1;border-bottom:none;">
-            <div class="section-head">
+        <div class="section flex-1 px-6 py-5 max-laptop:p-4 max-compact:p-3">
+            <div class="mb-4 flex items-center gap-2.5">
                 <div class="step-num">4</div>
-                <span class="section-title">Execution terminal</span>
-                <span id="term-state" style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-left:8px;"></span>
+                <span class="text-2xl/8 font-medium tracking-tighter text-balance text-ink">Execution terminal</span>
+                <span id="term-state" class="ml-2 font-mono text-[10px] text-ink-dim"></span>
             </div>
             <div class="terminal" id="terminal">
                 <span class="t-dim">── waiting for launch ────────────────────────────</span><br>
@@ -1128,9 +247,9 @@
 </div>
 
 <!-- Toast host -->
-<div id="toast-host"></div>
+<div id="toast-host" class="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2
+                            max-compact:bottom-3 max-compact:left-3 max-compact:right-3"></div>
 
-<script src="{{ url_for('static', filename='js/jquery-3.6.0.js') }}"></script>
 <script src="{{ url_for('static', filename='js/socket.io.js') }}"></script>
 <script>
     const socket = io();
