@@ -43,7 +43,7 @@
                 <span class="btn-icon">■</span><span class="btn-label max-phone:hidden"> stop</span>
             </button>
             <button id="run-btn" aria-label="Run analysis"
-                    {{ 'disabled' if not exp_config.exp_id or not exp_config.samplesheet or not nextflow.ok }}>
+                    {{ 'disabled' if not run.can_start }}>
                 <span class="btn-icon">▶</span><span class="btn-label max-phone:hidden"> run analysis</span>
             </button>
         </div>
@@ -80,11 +80,6 @@
         <div class="sidebar-section mt-auto px-3 pt-6 pb-5">
             <div class="sidebar-label">Session</div>
             <button class="btn w-full" onclick="resetAll()">reset all</button>
-            <div class="mt-4 flex items-center justify-between border-t border-edge-soft pt-3
-                        font-mono text-[10px] text-ink-mid">
-                <span>timon</span>
-                <span>v{{ version }}</span>
-            </div>
         </div>
 
     </aside>
@@ -102,27 +97,27 @@
             <div class="kpi">
                 <div class="kpi-label">Active pipeline</div>
                 <div class="flex min-w-0 items-center gap-2">
-                    <div class="pipe-indicator {{ 'active' if exp_config.current_pipeline }}" id="pipe-dot"></div>
-                    <span class="kpi-value" id="pipe-label">{{ exp_config.current_pipeline or 'none' }}</span>
+                    <div class="pipe-indicator {{ 'active' if run.pipeline_id }}" id="pipe-dot"></div>
+                    <span class="kpi-value" id="pipe-label">{{ run.pipeline_id or 'none' }}</span>
                 </div>
             </div>
 
             <div class="kpi">
                 <div class="kpi-label">Run identifier</div>
-                <div class="kpi-value" id="stat-runid">{{ exp_config.exp_id or '—' }}</div>
+                <div class="kpi-value" id="stat-runid">{{ run.id or '—' }}</div>
             </div>
 
             <div class="kpi">
                 <div class="kpi-label">Samples ready</div>
-                <div class="stat-value {% if table_rows|length > 0 %}has-data{% endif %}"
-                     id="stat-samples">{{ table_rows|length }}</div>
+                <div class="stat-value {% if run.n_samples > 0 %}has-data{% endif %}"
+                     id="stat-samples">{{ run.n_samples }}</div>
             </div>
 
             <div class="kpi">
                 <div class="kpi-label">Nextflow engine</div>
-                <div class="flex min-w-0 items-center gap-2" title="{{ nextflow.detail }}">
-                    <div class="pulse-dot {{ 'ok' if nextflow.ok else 'bad' }}"></div>
-                    <span class="kpi-value">{{ nextflow.label }}</span>
+                <div class="flex min-w-0 items-center gap-2" title="{{ engine.detail }}">
+                    <div class="pulse-dot {{ 'ok' if engine.ok else 'bad' }}"></div>
+                    <span class="kpi-value">{{ engine.label }}</span>
                 </div>
             </div>
         </section>
@@ -142,15 +137,15 @@
                     <div class="card-body">
                         <div class="pipe-grid">
                             {% for pid, p in pipelines.items() %}
-                            <div class="pipeline-card {{ 'selected' if exp_config.current_pipeline == pid }}"
+                            <div class="pipeline-card {{ 'selected' if run.pipeline_id == pid }}"
                                  data-pipe-id="{{ pid }}"
                                  onclick="selectPipe('{{ pid }}')">
                                 <div class="relative">
                                     <div class="pipe-icon">
                                         {% if p.icon.endswith('.png') or p.icon.endswith('.svg') %}
-                                            <img class="size-full object-cover" src="{{ url_for('static', filename=p.icon) }}" alt="{{ p.name }}">
+                                            <img class="pipe-shot" src="{{ url_for('static', filename=p.icon) }}" alt="{{ p.name }}">
                                         {% else %}
-                                            <span class="text-[30px]">{{ p.icon }}</span>
+                                            <div class="pipe-glyph">{{ p.icon }}</div>
                                         {% endif %}
                                     </div>
                                     <div class="pipe-name">{{ p.name }}</div>
@@ -179,7 +174,7 @@
                                     <label class="field-label" for="exp-id">run identifier</label>
                                     <input type="text" class="fi" id="exp-id" name="exp-id"
                                            placeholder="e.g. bloom_survey_2026"
-                                           value="{{ exp_config.exp_id }}" required>
+                                           value="{{ run.id }}" required>
                                 </div>
                             </div>
 
@@ -228,16 +223,16 @@
                                 <table class="samples">
                                     <thead id="sample-thead">
                                         <tr>
-                                            {% for col in active_pipe.columns %}
+                                            {% for col in columns %}
                                             <th>{{ col }}</th>
                                             {% endfor %}
                                             <th style="width:32px;"></th>
                                         </tr>
                                     </thead>
                                     <tbody id="sample-tbody">
-                                        {% for row in table_rows %}
+                                        {% for row in samples %}
                                         <tr>
-                                            {% for col in active_pipe.columns %}
+                                            {% for col in columns %}
                                             <td>
                                                 {% if col == 'date' %}
                                                 <input type="date" name="{{ col }}" value="{{ row[col] }}" required>
@@ -245,6 +240,7 @@
                                                 <div class="cell-path">
                                                     <input name="{{ col }}" value="{{ row[col] }}" required>
                                                     <button type="button" class="pick-btn" onclick="openBrowser(this)"
+                                                            data-pick="files" data-label="{{ col }}"
                                                             aria-label="browse for {{ col }}" title="browse for a file">
                                                         <svg width="12" height="12" viewBox="0 0 16 16" fill="none"
                                                              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
@@ -271,7 +267,7 @@
                             </div>
 
                             <div class="mt-3.5 flex items-center justify-between gap-3">
-                                <span class="sample-count" id="sample-count">{{ table_rows|length }} rows</span>
+                                <span class="sample-count" id="sample-count">{{ run.n_samples }} rows</span>
                                 <button type="submit" class="btn btn-success" id="sample-save-btn">validate &amp; save</button>
                             </div>
                         </form>
@@ -299,6 +295,12 @@
         </div>
       </div>
     </main>
+
+    <!-- A row of the shell grid rather than the last block of the scroll:
+         the year has to be on screen at all times. -->
+    <footer class="footer">
+        <span>&copy; {{ release_year }} timon</span>
+    </footer>
 </div>
 
 <!-- ── File browser ─────────────────────────────────────────
@@ -339,14 +341,21 @@
 
         <div class="fb-list" id="fb-list"></div>
 
+        <!-- The selection controls belong to the sample sheet, which takes
+             several files at once; a parameter takes one path, and a folder
+             is picked by standing in it. openBrowser() hides what the field
+             being filled has no use for. -->
         <div class="fb-foot">
-            <label class="check-item">
+            <label class="check-item" id="fb-seq-wrap">
                 <input type="checkbox" id="fb-seq" checked> sequence files only
             </label>
             <button type="button" class="btn" id="fb-all">select all shown</button>
-            <span class="card-sub ml-auto" id="fb-count">0 selected</span>
-            <button type="button" class="btn" id="fb-cancel">cancel</button>
-            <button type="button" class="btn btn-primary" id="fb-use">use selection</button>
+            <span class="card-sub" id="fb-count">0 selected</span>
+            <div class="fb-actions">
+                <button type="button" class="btn" id="fb-cancel">cancel</button>
+                <button type="button" class="btn" id="fb-use-dir" hidden>use this folder</button>
+                <button type="button" class="btn btn-primary" id="fb-use">use selection</button>
+            </div>
         </div>
 
     </div>
@@ -359,7 +368,7 @@
 <script src="{{ url_for('static', filename='js/socket.io.js') }}"></script>
 <script>
     const socket = io();
-    let activeCols = {{ active_pipe.columns | tojson }};
+    let activeCols = {{ columns | tojson }};
     let activePathCols = {{ path_columns | tojson }};
 
     // ── Ship's wheel ────────────────────────────────────────────
@@ -384,6 +393,13 @@
     }
 
     function setWheelRunning(on) { wheelRunning = on; syncWheel(); }
+
+    // Clicking the logo turns it. Bound on the mark rather than its anchor so
+    // the href stays a plain link target, and preventDefault keeps the '#'
+    // from scrolling the workspace back to the top.
+    document.querySelectorAll('.brand-mark').forEach(mark => {
+        mark.addEventListener('click', ev => { ev.preventDefault(); turnWheel(1400); });
+    });
 
     // ── Toast ───────────────────────────────────────────────────
     function toast(msg, type = 'ok') {
@@ -470,6 +486,7 @@
             if (!activePathCols.includes(c)) return `<td>${input}</td>`;
             return `<td><div class="cell-path">${input}` +
                    `<button type="button" class="pick-btn" onclick="openBrowser(this)" ` +
+                   `data-pick="files" data-label="${c}" ` +
                    `aria-label="browse for ${c}" title="browse for a file">${PICK_ICON}</button></div></td>`;
         }).join('');
         return `<tr>${cells}<td><button type="button" class="del-btn" onclick="delRow(this)">×</button></td></tr>`;
@@ -522,7 +539,65 @@
     // implementation of the form here to keep in step with it.
     function setParams(html) {
         document.getElementById('params-area').innerHTML = html;
+        syncParams();
     }
+
+    // ── parameter dependencies ──────────────────────────────────
+    //
+    // Which parameters a run still uses is decided by config.py's
+    // "active_when" and settled by model/params.py's inactive_ids(); the fields carry
+    // their condition as data-active-when so the page can follow a box being
+    // ticked without a round trip. Only the evaluation is duplicated here —
+    // the rules themselves stay in the pipeline entry.
+    //
+    // Hidden, never disabled: a hidden field keeps submitting the value it
+    // held, so unticking "skip QC" brings the thresholds back as they were,
+    // and the server drops what the run does not use anyway.
+    function paramValues() {
+        const vals = {};
+        document.querySelectorAll('#params-area [name]').forEach(el => {
+            vals[el.name] = el.type === 'checkbox' ? el.checked : el.value;
+        });
+        return vals;
+    }
+
+    function paramMatches(value, wanted) {
+        return wanted.some(w => w === value || String(w) === String(value));
+    }
+
+    function syncParams() {
+        const area = document.getElementById('params-area');
+        if (!area) return;
+        const vals  = paramValues();
+        const items = Array.from(area.querySelectorAll('[data-param]'));
+        const off   = new Set();
+        // A parameter can hang off one that is itself switched off ("skip
+        // Nanoplot" under "skip QC"), so this settles rather than evaluating
+        // once; each pass can only add, so it terminates.
+        for (;;) {
+            const dropped = items.filter(el =>
+                !off.has(el.dataset.param) && el.dataset.activeWhen &&
+                Object.entries(JSON.parse(el.dataset.activeWhen)).some(
+                    ([key, wanted]) => off.has(key) || !paramMatches(vals[key], wanted)));
+            if (!dropped.length) break;
+            dropped.forEach(el => off.add(el.dataset.param));
+        }
+        items.forEach(el => { el.hidden = off.has(el.dataset.param); });
+
+        // A grid, a checkbox row or a whole section with nothing left in it is
+        // a heading for a step this run does not take.
+        area.querySelectorAll('.field-grid, .check-row, .param-section').forEach(box => {
+            const own = Array.from(box.querySelectorAll('[data-param]'));
+            const live = own.filter(el => !el.hidden);
+            box.hidden = own.length > 0 && live.length === 0;
+            const count = box.querySelector('.param-section-count');
+            if (count) count.textContent = live.length;
+        });
+    }
+
+    // Delegated from the form, which outlives the fields: setParams() replaces
+    // them wholesale on a pipeline switch.
+    document.getElementById('config-form').addEventListener('change', syncParams);
 
     function termLine(html) {
         const t = document.getElementById('terminal');
@@ -571,8 +646,8 @@
                     toast(data.error || 'validation failed', 'err');
                     return;
                 }
-                setRunReady(data.run_ready);
-                document.getElementById('stat-runid').textContent = fd.get('exp-id') || '—';
+                setRunReady(data.can_start);
+                document.getElementById('stat-runid').textContent = data.id || '—';
                 lockForm('config-form', 'config-edit-btn', 'step2-num');
                 toast('configuration saved');
             })
@@ -603,7 +678,7 @@
                     return;
                 }
                 setValidatedCount(data.n_samples);
-                setRunReady(data.run_ready);
+                setRunReady(data.can_start);
                 lockSampleSheet();
                 toast('sample sheet validated & saved');
             })
@@ -629,13 +704,27 @@
     // refusal put to the user, so the rule has one implementation and it
     // is not this one.
     const fb = {
-        input:    null,      // the sample-sheet cell being filled
-        column:   '',
+        input:    null,      // the field being filled
+        label:    '',
+        mode:     'files',   // what that field takes; see FB_MODES
         dir:      null,      // the listing on screen
         visible:  [],        // what the filter left of it
         pending:  null,      // path waiting on a permission answer
         selected: new Set(),
     };
+
+    // The same browser fills two kinds of field, and they want different
+    // things of it. A sample-sheet column takes any number of read files,
+    // collapsed into one pattern; a path parameter takes exactly one path,
+    // and what kind of path is declared in config.py ("path": dir/file/any)
+    // and carried here on the button's data-pick.
+    const FB_MODES = {
+        files: { title: 'Choose files',           multi: true  },
+        file:  { title: 'Choose a file',          multi: false },
+        dir:   { title: 'Choose a folder',        multi: false },
+        any:   { title: 'Choose a file or folder', multi: false },
+    };
+    const fbMode = () => FB_MODES[fb.mode] || FB_MODES.files;
 
     const fbEl = id => document.getElementById(id);
 
@@ -653,17 +742,40 @@
     }
 
     function openBrowser(btn) {
-        fb.input  = btn.closest('.cell-path').querySelector('input');
-        fb.column = fb.input.name;
-        fbEl('fb-target').textContent = '→ ' + fb.column;
+        fb.input = btn.closest('.cell-path').querySelector('input');
+        fb.mode  = btn.dataset.pick || 'files';
+        fb.label = btn.dataset.label || fb.input.name;
+        fb.selected.clear();
+        const mode = fbMode();
+
+        fbEl('fb-title').textContent  = mode.title;
+        fbEl('fb-target').textContent = '→ ' + fb.label;
+        // The sequence-file filter, and selecting a whole folder's worth at
+        // once, are both about reads. A reference database is a directory or
+        // a tarball, and the filter would hide exactly the thing being
+        // looked for.
+        fbEl('fb-seq-wrap').hidden = !mode.multi;
+        fbEl('fb-all').hidden      = !mode.multi;
+        fbEl('fb-count').hidden    = fb.mode === 'dir';
+        fbEl('fb-use').hidden      = fb.mode === 'dir';
+        // A folder is navigated into rather than clicked, so picking the one
+        // on screen needs a button of its own.
+        fbEl('fb-use-dir').hidden  = fb.mode !== 'dir' && fb.mode !== 'any';
+        fbEl('fb-use-dir').classList.toggle('btn-primary', fb.mode === 'dir');
+
         fbEl('fb-overlay').hidden = false;
         document.body.classList.add('modal-open');
-        // Re-picking starts where the cell already points rather than back
-        // at the root — but only if that folder is still allowed, so a
-        // stale path cannot open with a permission prompt in the user's face.
+
+        // Re-picking starts where the field already points rather than back
+        // at the root. Whether the value names a folder or a file is not
+        // knowable here, so both are tried before falling back to the root:
+        // a stale — or no longer permitted — path must not open with an
+        // error or a permission prompt in the user's face.
         const current = fb.input.value.trim();
-        const dir = current ? current.replace(/\/[^\/]*$/, '') : '';
-        fbLoad(dir, { fallbackToRoot: true });
+        const parent  = current ? current.replace(/\/[^\/]*$/, '') : '';
+        const tries = (mode.multi ? [parent] : [current, parent]).filter(Boolean);
+        tries.push(null);
+        fbLoad(tries.shift(), { fallbacks: tries });
     }
 
     function closeBrowser() {
@@ -673,18 +785,28 @@
         fb.input = null;
         fb.pending = null;
         fb.selected.clear();
+        fb.mode = 'files';
     }
 
+    // opts.fallbacks: folders to try in turn if this one cannot be opened,
+    // ending at the workspace root. Only the opening load has any — a folder
+    // the user clicked on and cannot read is worth saying so about.
     function fbLoad(path, opts = {}) {
+        const fallbacks = opts.fallbacks || [];
+        const retry = () => fbLoad(fallbacks[0], { fallbacks: fallbacks.slice(1) });
         fetch('/browse?path=' + encodeURIComponent(path || ''))
             .then(r => r.json().then(data => ({ status: r.status, data })))
             .then(({ status, data }) => {
                 if (status === 403 && data.needs_permission) {
-                    if (opts.fallbackToRoot) { fbLoad(null); return; }
+                    if (fallbacks.length) { retry(); return; }
                     fbAsk(data);
                     return;
                 }
-                if (!data.ok) { toast(data.error || 'cannot open that folder', 'err'); return; }
+                if (!data.ok) {
+                    if (fallbacks.length) { retry(); return; }
+                    toast(data.error || 'cannot open that folder', 'err');
+                    return;
+                }
                 fbEl('fb-perm').hidden = true;
                 fb.pending = null;
                 fb.dir = data;
@@ -694,7 +816,10 @@
                 fb.selected.clear();
                 fbRender();
             })
-            .catch(() => toast('cannot open that folder', 'err'));
+            .catch(() => {
+                if (fallbacks.length) { retry(); return; }
+                toast('cannot open that folder', 'err');
+            });
     }
 
     function fbAsk(data) {
@@ -728,13 +853,17 @@
         fbEl('fb-up-glyph').textContent = (d.at_root && !d.outside_ok) ? '⇧' : '↑';
         fbEl('fb-up').classList.toggle('locked', d.at_root && !d.outside_ok);
 
-        const seqOnly = fbEl('fb-seq').checked;
+        const mode = fbMode();
+        const seqOnly = mode.multi && fbEl('fb-seq').checked;
+        // Files still show while a folder is being picked — seeing what is in
+        // it is half of recognising it — but they are not selectable.
+        const pickFiles = fb.mode !== 'dir';
         fb.visible = d.entries.filter(e => e.dir || !seqOnly || e.seq);
 
         if (!fb.visible.length) {
-            const why = d.entries.length
-                ? 'no sequence files here — untick the filter to see everything'
-                : 'this folder is empty';
+            const why = !d.entries.length ? 'this folder is empty'
+                : seqOnly ? 'no sequence files here — untick the filter to see everything'
+                : 'nothing to show here';
             fbEl('fb-list').innerHTML = `<div class="fb-empty">${why}</div>`;
         } else {
             fbEl('fb-list').innerHTML = fb.visible.map((e, i) => e.dir
@@ -742,7 +871,7 @@
                        <span class="fb-ico">▸</span>
                        <span class="fb-name">${fbEscape(e.name)}</span>
                    </div>`
-                : `<div class="fb-row file${e.seq ? ' seq' : ''}" data-i="${i}" data-path="${fbEscape(e.path)}">
+                : `<div class="fb-row file${e.seq ? ' seq' : ''}${pickFiles ? '' : ' inert'}" data-i="${i}" data-path="${fbEscape(e.path)}">
                        <span class="fb-ico">${e.seq ? '≡' : '·'}</span>
                        <span class="fb-name">${fbEscape(e.name)}</span>
                        <span class="fb-meta">${fbSize(e.size)}</span>
@@ -755,11 +884,15 @@
                 const entry = fb.visible[row.dataset.i];
                 if (entry.dir) {
                     row.addEventListener('click', () => fbLoad(entry.path));
-                } else {
+                } else if (pickFiles) {
                     row.addEventListener('click', () => {
-                        fb.selected.has(entry.path)
-                            ? fb.selected.delete(entry.path)
-                            : fb.selected.add(entry.path);
+                        const on = fb.selected.has(entry.path);
+                        // Everywhere but the sample sheet the field holds one
+                        // path, so a click moves the selection rather than
+                        // adding to it.
+                        if (!mode.multi) fb.selected.clear();
+                        on ? fb.selected.delete(entry.path)
+                           : fb.selected.add(entry.path);
                         fbSync();
                     });
                     // Picking one file is the common case, and asking for a
@@ -782,25 +915,43 @@
             row.classList.toggle('sel', fb.selected.has(row.dataset.path)));
     }
 
-    function fbUse() {
-        if (!fb.input || !fb.selected.size) return;
+    // The server resolves what was picked — one path, or several collapsed
+    // into a pattern — because model.convert_realpaths_to_wildcards is what
+    // the folder scan already uses and a second implementation here could
+    // disagree with it.
+    function fbApply(paths, noun) {
         const fd = new FormData();
-        fb.selected.forEach(p => fd.append('paths', p));
-        const n = fb.selected.size, col = fb.column, input = fb.input;
+        paths.forEach(p => fd.append('paths', p));
+        const n = paths.length, label = fb.label, input = fb.input;
         fetch('/browse_pick', { method: 'POST', body: fd })
             .then(r => r.json())
             .then(data => {
                 if (!data.ok) { toast(data.error || 'could not use that selection', 'err'); return; }
                 input.value = data.value;
+                // A parameter can switch others on or off, and the form only
+                // follows a change event (see syncParams).
+                input.dispatchEvent(new Event('change', { bubbles: true }));
                 closeBrowser();
-                toast(n === 1 ? `file → ${col}` : `${n} files → ${col} (as one pattern)`);
+                toast(n === 1 ? `${noun} → ${label}` : `${n} files → ${label} (as one pattern)`);
             })
             .catch(() => toast('could not use that selection', 'err'));
+    }
+
+    function fbUse() {
+        if (!fb.input || !fb.selected.size) return;
+        fbApply([...fb.selected], 'file');
+    }
+
+    // Picks the folder on screen, which is the one the crumbs name.
+    function fbUseDir() {
+        if (!fb.input || !fb.dir) return;
+        fbApply([fb.dir.path], 'folder');
     }
 
     fbEl('fb-up').addEventListener('click', () => { if (fb.dir) fbLoad(fb.dir.parent); });
     fbEl('fb-seq').addEventListener('change', () => { if (fb.dir) fbRender(); });
     fbEl('fb-use').addEventListener('click', fbUse);
+    fbEl('fb-use-dir').addEventListener('click', fbUseDir);
     fbEl('fb-cancel').addEventListener('click', closeBrowser);
     fbEl('fb-close').addEventListener('click', closeBrowser);
     fbEl('fb-overlay').addEventListener('click', e => {
@@ -929,12 +1080,13 @@
 
     // ── Restore locked state on page load if already configured ──
     (function restoreState() {
-        {% if exp_config.exp_id %}
+        syncParams();
+        {% if run.configured %}
             lockForm('config-form', 'config-edit-btn', 'step2-num');
         {% endif %}
-        {% if table_rows|length > 0 %}
+        {% if run.n_samples > 0 %}
             lockSampleSheet();
-            setValidatedCount({{ table_rows|length }});
+            setValidatedCount({{ run.n_samples }});
         {% endif %}
     })();
 </script>
