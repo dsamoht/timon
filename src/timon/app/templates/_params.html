@@ -1,28 +1,31 @@
-{# Run-configuration fields, from params.param_sections().
+{# Run-configuration fields, from presenters.params_view().
 
    Rendered both into the page and, on a pipeline switch, straight into
    #params-area by /set_pipeline — so this file is the only place the form
    exists.
 
    Field ids are prefixed: a parameter is free to be called "terminal" or
-   "run-btn", and an unprefixed id would then collide with the app's own. #}
+   "run-btn", and an unprefixed id would then collide with the app's own.
 
-{% set multi = param_sections | length > 1 %}
-{% for section in param_sections %}
-{% set values = exp_config.params %}
-<div class="param-section">
+   A field the run does not use is hidden rather than dropped: it keeps
+   submitting the value it held, so ticking "skip QC" back off restores the
+   thresholds instead of resetting them, and the server ignores whatever a
+   hidden field sends (see model.params.inactive_ids). "active" is only the first
+   paint — data-active-when carries the same condition to the page, which
+   re-evaluates it as the form is filled in. #}
 
-    {% if multi and section.title %}
-    <div class="param-section-title">{{ section.title }}</div>
-    {% if section.description %}
-    <p class="param-section-desc">{{ section.description }}</p>
-    {% endif %}
-    {% endif %}
+{% macro field_state(p) -%}
+data-param="{{ p.id }}"
+{%- if p.active_when %} data-active-when='{{ p.active_when | tojson }}'{% endif %}
+{%- if not p.active %} hidden{% endif %}
+{%- endmacro %}
 
+{% macro section_body(section, values) %}
+    {% set live_fields = section.fields | selectattr('active') | list %}
     {% if section.fields %}
-    <div class="field-grid">
+    <div class="field-grid"{% if not live_fields %} hidden{% endif %}>
         {% for p in section.fields %}
-        <div class="field-wrap">
+        <div class="field-wrap" {{ field_state(p) }}>
             <label class="field-label" for="p-{{ p.id }}">
                 {{ p.label }}{% if p.required %}<span class="field-req" title="required">*</span>{% endif %}
             </label>
@@ -41,6 +44,25 @@
                    step="{{ p.step | default(1) }}"
                    {% if p.min is defined %}min="{{ p.min }}"{% endif %}
                    {% if p.max is defined %}max="{{ p.max }}"{% endif %}>
+
+            {% elif p.path %}
+            {# A path is found, not remembered: the same browse button the
+               sample sheet's path columns have, told through data-pick what
+               this parameter can take. #}
+            <div class="cell-path">
+                <input type="text" class="fi" id="p-{{ p.id }}" name="{{ p.id }}"
+                       value="{{ values.get(p.id, p.default) }}"
+                       {% if p.placeholder %}placeholder="{{ p.placeholder }}"{% endif %}>
+                <button type="button" class="pick-btn" onclick="openBrowser(this)"
+                        data-pick="{{ p.path }}" data-label="{{ p.label }}"
+                        aria-label="browse for {{ p.label }}"
+                        title="browse for {{ 'a folder' if p.path == 'dir' else 'a file' }}">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none"
+                         stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+                        <path d="M1.5 13V3.5h4l1.5 2h7.5V13z"/>
+                    </svg>
+                </button>
+            </div>
 
             {% else %}
             <input type="text" class="fi" id="p-{{ p.id }}" name="{{ p.id }}"
@@ -66,10 +88,11 @@
     </div>
     {% endif %}
 
+    {% set live_flags = section.flags | selectattr('active') | list %}
     {% if section.flags %}
-    <div class="check-row{% if section.fields %} mt-3.5{% endif %}">
+    <div class="check-row{% if live_fields %} mt-3.5{% endif %}"{% if not live_flags %} hidden{% endif %}>
         {% for p in section.flags %}
-        <label class="check-item"{% if p.help_text or p.description %} title="{{ p.help_text or p.description }}"{% endif %}>
+        <label class="check-item" {{ field_state(p) }}{% if p.help_text or p.description %} title="{{ p.help_text or p.description }}"{% endif %}>
             <input type="checkbox" name="{{ p.id }}"
                    {% if values.get(p.id, p.default) %}checked{% endif %}>
             {{ p.label }}
@@ -77,8 +100,33 @@
         {% endfor %}
     </div>
     {% endif %}
+{% endmacro %}
 
+{% set multi = param_sections | length > 1 %}
+{% for section in param_sections %}
+{% set values = param_values %}
+{% if multi and section.title %}
+{# A pipeline that declares several groups folds them away: a run touches a
+   couple of them, and every group open at once pushes the sample sheet a
+   screen of defaults down. Folding is <details> rather than JS, so a folded
+   section keeps its fields in the DOM and submits them all the same. #}
+<details class="param-section"{% if section.open %} open{% endif %}{% if not section.active %} hidden{% endif %}>
+    <summary class="param-section-head">
+        <span class="param-section-title">{{ section.title }}</span>
+        {# The count is what the run uses, not what the pipeline declares. #}
+        <span class="param-section-count">{{ (section.fields + section.flags) | selectattr('active') | list | length }}</span>
+    </summary>
+    {% if section.description %}
+    <p class="param-section-desc">{{ section.description }}</p>
+    {% endif %}
+    {{ section_body(section, values) }}
+</details>
+{% else %}
+{# A single unnamed group — there is nothing to fold it away from. #}
+<div class="param-section"{% if not section.active %} hidden{% endif %}>
+    {{ section_body(section, values) }}
 </div>
+{% endif %}
 {% else %}
 <p class="field-help">This pipeline exposes no configurable parameters.</p>
 {% endfor %}

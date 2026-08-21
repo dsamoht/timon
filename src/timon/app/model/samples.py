@@ -1,7 +1,14 @@
+"""Finding the reads already sitting in the input folder.
+
+A scan is a starting point for the sample sheet, not an answer: it guesses a
+sample name from how the files are laid out, and the user corrects it.
+"""
+
 import os
 import re
 from collections import defaultdict
-from .config import Config
+
+from ..config import Config
 
 
 def convert_realpaths_to_wildcards(paths):

@@ -6,7 +6,9 @@ directory that TIMON_DB_DIR can override.
 """
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable, Iterable
 
 _PKG = Path(__file__).resolve().parent
 
@@ -33,11 +35,30 @@ def genes_db() -> Path:
     return _PKG / "resources" / GENES_DB_NAME
 
 
-def missing_reference_data() -> list[str]:
+@dataclass(frozen=True)
+class ReferenceData:
+    """One piece of timon's own reference data: where it is and what it is."""
+
+    locate: Callable[[], Path]
+    kind: str            # "dir" | "file"
+    label: str
+
+    def present(self) -> bool:
+        path = self.locate()
+        return path.is_dir() if self.kind == "dir" else path.is_file()
+
+
+# Keyed by the name a pipeline entry uses under "reference_data"; the nextflow
+# flag each is passed under is in model.nextflow, which is the only place that
+# has to know the flags.
+REFERENCE_DATA = {
+    "genomes_db": ReferenceData(genomes_db, "dir", "genome database"),
+    "genes_db":   ReferenceData(genes_db, "file", "gene database"),
+}
+
+
+def missing_reference_data(names: Iterable[str] | None = None) -> list[str]:
     """Reference data that a run expects but which is absent on disk."""
-    missing = []
-    if not genomes_db().is_dir():
-        missing.append(f"genome database not found: {genomes_db()}")
-    if not genes_db().is_file():
-        missing.append(f"gene database not found: {genes_db()}")
-    return missing
+    return [f"{ref.label} not found: {ref.locate()}"
+            for ref in (REFERENCE_DATA[n] for n in (names or REFERENCE_DATA))
+            if not ref.present()]

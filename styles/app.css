@@ -117,9 +117,10 @@
     --color-ink-mid:     #000000;
     --color-ink-muted:   #000000;
 
-    /* Sampled from the logo, so the live wheel and the wordmark PNG are
-       the same brown. Brand ink: it carries no state and is never text. */
-    --color-brand:       #582e26;
+    /* The mark's ink — the wheel and the version riding on it. Its own
+       token rather than --color-ink because it carries no state and is not
+       body text: the mark can be recoloured without touching the copy. */
+    --color-brand:       #000000;
 
     --color-accent:      #1d4ed8;   /*  5.61:1 */
     --color-accent-dim:  #bfdbfe;
@@ -198,14 +199,19 @@
     /* Not a @theme value: it changes per breakpoint, which theme variables
        cannot do. Read in markup with h-(--topbar-h) / grid-rows-(...). */
     :root { --topbar-h: 76px; }
+    /* The footer's height, set here rather than falling out of its padding
+       because the mobile drawer is fixed and has to be told where to stop. */
+    :root { --footer-h: 26px; }
 
     /* The shell is already 100dvh, but a full-screen browser on a phone
        must not leave the sheet behind it scrolling under a finger. */
     body.modal-open { @apply overflow-hidden; }
+    /* Below the tablet tier the bar also carries the logo, so it keeps a
+       little more height than a row of controls would need on its own. */
     @media (max-width: 1200px) { :root { --topbar-h: 68px; } }
-    @media (max-width:  900px) { :root { --topbar-h: 60px; } }
-    @media (max-width:  600px) { :root { --topbar-h: 56px; } }
-    @media (max-width:  480px) { :root { --topbar-h: 50px; } }
+    @media (max-width:  900px) { :root { --topbar-h: 64px; } }
+    @media (max-width:  600px) { :root { --topbar-h: 60px; } }
+    @media (max-width:  480px) { :root { --topbar-h: 56px; } }
 
     html, body {
         height: 100%;
@@ -250,13 +256,14 @@
 @layer components {
 
     /* ── shell ──────────────────────────────────────────────────────
-       Sidebar owns the full height and the brand; the topbar starts
-       where the sidebar ends. Below the tablet tier the sidebar leaves
-       the grid entirely (it becomes a drawer, see below) and the two
-       remaining rows stack in one column.                              */
+       Sidebar owns the topbar and workspace rows and the brand; the
+       topbar starts where the sidebar ends. The footer is a row of its
+       own across the full width, so it is always on screen. Below the
+       tablet tier the sidebar leaves the grid entirely (it becomes a
+       drawer, see below) and the remaining rows stack in one column.   */
     .shell {
         @apply grid overflow-hidden
-               grid-cols-[260px_1fr] grid-rows-[var(--topbar-h)_1fr]
+               grid-cols-[260px_1fr] grid-rows-[var(--topbar-h)_1fr_auto]
                max-laptop:grid-cols-[224px_1fr] max-tablet:grid-cols-1;
         height: 100vh;
         /* dvh accounts for mobile browser chrome resizing the viewport. */
@@ -281,6 +288,19 @@
                max-laptop:gap-4 max-laptop:p-4 max-compact:gap-3 max-compact:p-3;
     }
 
+    /* ── footer ─────────────────────────────────────────────────────
+       The release year of the running version. A grid row rather than a
+       block at the end of the workspace: it has to stay visible at every
+       scroll position, and rather than position: fixed so it cannot end up
+       sitting on top of the workspace's last row on a short viewport.  */
+    .footer {
+        @apply col-span-2 row-start-3 z-30 flex shrink-0 items-center
+               justify-center border-t border-edge-soft bg-surface px-6
+               font-mono text-[10px] leading-none text-ink-mid
+               max-tablet:col-span-1 max-compact:px-3;
+        height: var(--footer-h);
+    }
+
     /* ── sidebar ────────────────────────────────────────────────────
        Below the tablet tier it becomes a slide-in drawer. The open state
        is toggled from JS, so the transform pair has to live in CSS.     */
@@ -290,9 +310,11 @@
     }
     @media (max-width: 900px) {
         .sidebar {
-            @apply fixed bottom-0 left-0 z-60 w-[264px] max-w-[82vw]
+            @apply fixed left-0 z-60 w-[264px] max-w-[82vw]
                    -translate-x-full transition-transform duration-200 ease-out;
             top: var(--topbar-h);
+            /* Stops above the footer, which is the one thing that stays put. */
+            bottom: var(--footer-h);
             box-shadow: 4px 0 20px rgba(13, 17, 23, 0.2);
         }
         .sidebar.open { @apply translate-x-0; }
@@ -301,6 +323,7 @@
     .sidebar-backdrop {
         @apply fixed inset-0 z-55 hidden bg-ink/40;
         top: var(--topbar-h);
+        bottom: var(--footer-h);
     }
     .sidebar-backdrop.show { @apply block; }
 
@@ -310,15 +333,19 @@
         @apply flex shrink-0 items-center justify-center border-b
                border-edge-soft px-4 py-5 max-laptop:px-3 max-laptop:py-4;
     }
-    /* Matches what the old single-image logo measured at this width. */
-    .brand { --brand-h: 103px; }
-    @media (max-width: 1200px) { .brand { --brand-h: 87px; } }
+    /* Sized to fill the sidebar's width rather than to match the old
+       single-image logo: the wheel is the only mark the app carries, and at
+       the previous 103px it read as a decoration rather than a logo. */
+    .brand { --brand-h: 170px; }
+    @media (max-width: 1200px) { .brand { --brand-h: 146px; } }
 
     /* Below the tablet tier the sidebar is a drawer, so the mark moves into
-       the topbar — where it has a line's height rather than a panel's. */
-    .brand-mini { --brand-h: 33px; }
-    @media (max-width: 600px) { .brand-mini { --brand-h: 30px; } }
-    @media (max-width: 480px) { .brand-mini { --brand-h: 26px; } }
+       the topbar — where it has a line's height rather than a panel's.
+       Kept at roughly 70% of --topbar-h: enough to read the wheel's spokes,
+       still clear of the bar's border. */
+    .brand-mini { --brand-h: 50px; }
+    @media (max-width: 600px) { .brand-mini { --brand-h: 46px; } }
+    @media (max-width: 480px) { .brand-mini { --brand-h: 42px; } }
 
     .sidebar-label {
         @apply mb-2 px-1 font-mono text-[10px] font-semibold uppercase
@@ -394,10 +421,11 @@
     .pipe-indicator.active { @apply bg-accent; }
 
     /* ── brand mark ─────────────────────────────────────────────
-       The logo, with its wheel drawn live instead of baked into the PNG so
-       it can turn: every positive update gives it a few spokes, and it
-       keeps turning for as long as nextflow is running. Errors leave it
-       still — a wheel that spins on a failure would read as progress.
+       The logo — the wheel on its own, no wordmark — drawn live instead of
+       shipped as an image so it can turn: every positive update gives it a
+       few spokes, a click on it gives it a few more, and it keeps turning
+       for as long as nextflow is running. Errors leave it still — a wheel
+       that spins on a failure would read as progress.
 
        Two drawn frames alternating, not a CSS rotate: the wheel is drawn
        in perspective, and rotating that drawing would swing the whole
@@ -406,14 +434,46 @@
        Every length is a ratio of --brand-h (the height of the wheel),
        taken from the original logo so the mark keeps its proportions
        wherever it is placed. The frames are masks rather than <img> so
-       the ink matches the wordmark from one token.                      */
+       the ink comes from one token.                                     */
     .brand-mark {
-        @apply flex items-center justify-center;
-        gap: calc(var(--brand-h) * 0.027);
+        @apply flex cursor-pointer items-center justify-center;
     }
+    /* In the sidebar the name goes under the wheel: stacking them is what
+       lets the wheel be the size of the panel rather than the size of a
+       line. In the topbar there is only one line to work with, so the same
+       pieces run across it. */
+    .brand .brand-mark      { @apply flex-col; gap: calc(var(--brand-h) * 0.07); }
+    .brand-mini .brand-mark { @apply flex-row; gap: calc(var(--brand-h) * 0.22); }
+
+    /* The wordmark, and the version tucked under its right edge: the name
+       and what it is a version *of* read as one object. */
+    .brand-lockup { @apply flex min-w-0; }
+    .brand .brand-lockup      { @apply flex-col items-end gap-1; }
+    .brand-mini .brand-lockup { @apply flex-row items-baseline gap-1.5; }
+
+    /* Set in the page's own mono, like the footer's byline — the name in
+       the interface's voice rather than a second typeface to carry. 600 is
+       the heaviest weight vendored; 700 would be a synthesised bold. */
     .brand-word {
-        height: calc(var(--brand-h) * 0.309);
-        width: auto;
+        @apply block shrink-0 font-mono leading-none tracking-tight text-brand;
+        font-weight: 600;
+    }
+    .brand .brand-word      { font-size: calc(var(--brand-h) * 0.30); }
+    .brand-mini .brand-word { font-size: calc(var(--brand-h) * 0.40); }
+
+    .brand-version {
+        @apply font-mono font-medium leading-none text-brand;
+        font-size: calc(var(--brand-h) * 0.085);
+    }
+    .brand-mini .brand-version { font-size: calc(var(--brand-h) * 0.24); }
+
+    /* On a phone the topbar cannot spare the width for a wheel that small
+       to still read as a wheel, so the name carries the brand alone — and
+       gets the height the wheel was using. */
+    @media (max-width: 600px) {
+        .brand-mini .wheel         { @apply hidden; }
+        .brand-mini .brand-word    { font-size: calc(var(--brand-h) * 0.55); }
+        .brand-mini .brand-version { font-size: calc(var(--brand-h) * 0.30); }
     }
 
     .wheel {
@@ -525,17 +585,51 @@
         box-shadow: 0 0 0 3px var(--color-accent-glow);
     }
 
-    /* ── schema-derived parameter sections ──────────────────────────
-       A nextflow_schema.json groups its parameters ("Read QC options",
-       "Binning options"); those groups are the only structure the form
-       has, so they carry a heading and a rule. */
-    .param-section + .param-section { @apply border-t border-edge-soft pt-5; }
-    /* Sans and sentence case, so a group heading does not read as one more
-       mono uppercase field label. Schema titles are already written that
-       way ("Read QC options"). */
-    .param-section-title {
-        @apply mb-3 text-[12.5px] font-semibold tracking-[-0.005em] text-ink;
+    /* ── parameter sections ─────────────────────────────────────────
+       A pipeline groups its parameters ("read QC", "binning"); those
+       groups are the only structure the form has, so they carry a
+       heading and a rule. A pipeline with several of them renders each
+       as a <details>, foldable so a long form opens on the handful of
+       groups a run is actually deciding. */
+    /* A parameter this run does not use is hidden, not removed, so it keeps
+       submitting its value (see _params.html). These carry a display of
+       their own, which [hidden] alone would not win against. */
+    .field-grid[hidden], .field-wrap[hidden],
+    .check-row[hidden], .check-item[hidden], .param-section[hidden] { @apply hidden; }
+    /* The rule belongs between two groups that are both on screen: drawn on
+       the first visible section it would hang under the heading above. */
+    .param-section:not([hidden]) ~ .param-section:not([hidden]) {
+        @apply border-t border-edge-soft pt-5;
     }
+    /* The whole heading row is the fold's hit target — on a phone a
+       chevron alone is too small to aim at. */
+    .param-section-head {
+        @apply -mx-1 flex cursor-pointer list-none items-center gap-2 rounded-md
+               px-1 py-1 select-none;
+    }
+    .param-section-head::-webkit-details-marker { display: none; }
+    .param-section-head:hover .param-section-title { @apply text-accent; }
+    /* Chevron, drawn before the title: right when folded, down when open. */
+    .param-section-head::before {
+        @apply mr-0.5 inline-block size-[7px] shrink-0 border-r-[1.6px] border-b-[1.6px]
+               border-ink-mid transition-transform duration-150;
+        content: "";
+        transform: rotate(-45deg);
+    }
+    details[open] > .param-section-head::before { transform: rotate(45deg); }
+    /* Sans and sentence case, so a group heading does not read as one more
+       mono uppercase field label. */
+    .param-section-title {
+        @apply text-[12.5px] font-semibold tracking-[-0.005em] text-ink;
+    }
+    /* How many parameters the fold hides, so a folded group is not a
+       blind guess. */
+    .param-section-count {
+        @apply rounded-full border border-edge2 px-1.5 font-mono
+               text-[10px] leading-[15px] text-ink-dim;
+    }
+    /* Room between the heading row and the first field only once open. */
+    details.param-section[open] > .param-section-head { @apply mb-3; }
     /* The group's own sentence, above its fields. Sits between the heading
        and the grid, so it keeps the heading's sans face but the muted tone
        of the per-field help. */
@@ -632,15 +726,20 @@
     /* ── path cells ─────────────────────────────────────────────────
        Columns that hold a path get a browse button beside the field:
        reads are found, not remembered, and typing an absolute path into
-       a table cell is the worst way to enter one. */
+       a table cell is the worst way to enter one.
+       The run-configuration form reuses both for its path parameters
+       (config.py "path"), so a database is found the same way a read is. */
     .cell-path { @apply flex items-center gap-0.5; }
+    /* An input keeps a default intrinsic width of ~20 characters, which in a
+       flex row is a floor it would rather overflow the cell than give up. */
+    .cell-path .fi { @apply min-w-0 flex-1; }
     .pick-btn {
         @apply flex shrink-0 cursor-pointer items-center justify-center rounded
                border border-transparent bg-transparent p-1 text-ink-mid
                transition-[background-color,color,border-color] duration-100;
     }
     .pick-btn:hover { @apply border-accent-dim bg-accent-glow text-accent; }
-    .tbl-locked .pick-btn { @apply hidden; }
+    .tbl-locked .pick-btn, .form-locked .pick-btn { @apply hidden; }
 
     /* ── file browser ───────────────────────────────────────────────
        A modal rather than a panel: it is a detour out of the sample
@@ -723,6 +822,9 @@
     /* Files the pipeline can actually take read at full contrast; the rest
        stay visible — an unusual extension is not a reason to hide a file. */
     .fb-row.file:not(.seq) .fb-name { @apply text-ink-dim; }
+    /* Shown for context while a folder is being picked, but not a target. */
+    .fb-row.file.inert { @apply cursor-default; }
+    .fb-row.file.inert:hover { @apply bg-transparent; }
     .fb-row.sel       { @apply border-accent-dim bg-accent-glow text-accent; }
     .fb-row.sel::after {
         content: '✓';
@@ -739,6 +841,10 @@
         @apply flex flex-wrap items-center gap-2 border-t border-edge-soft
                bg-bg px-5 py-3 max-compact:px-3.5;
     }
+    /* The buttons stay together on the right whether or not the selection
+       controls beside them are on screen for this kind of field. */
+    .fb-actions { @apply ml-auto flex flex-wrap items-center gap-2; }
+    .fb-foot .btn[hidden], .fb-foot .check-item[hidden] { @apply hidden; }
     .fb-foot .btn[disabled] { @apply cursor-not-allowed opacity-40; }
     .fb-foot .btn[disabled]:hover { @apply border-accent-dim bg-accent-glow text-accent; }
 
@@ -804,9 +910,29 @@
                rounded-full bg-accent text-[11px] font-semibold text-white;
     }
 
-    .pipe-icon {
-        @apply mb-3 flex size-[60px] items-center justify-center overflow-hidden
-               rounded-lg border border-edge-soft bg-surface2;
+    /* The workflow's picture is the fastest way to tell the three cards
+       apart, so it gets the card's full width instead of a 60px thumbnail,
+       and grows with the card on a wide display.
+
+       No tile behind it, and no fixed shape: the artworks range from 1:1 to
+       2.2:1 and are opaque PNGs, so a fixed box either cropped the wide ones
+       or left its own background showing beside them as grey margins. Each
+       one keeps its own aspect instead — nothing cropped, no margins to
+       show. Card heights are equalised by the grid, not by the image. */
+    .pipe-icon { @apply mb-3 overflow-hidden rounded-lg; }
+    /* Capped so the one square artwork does not tower over the two
+       landscape ones and leave the row ragged. object-contain against a
+       transparent element: whatever margin the cap leaves is the card's
+       own surface, not a tile of another colour. */
+    .pipe-shot { @apply block w-full max-h-[180px] object-contain; }
+    /* Below this the grid is a single column, so there is no row to keep
+       even — each picture takes the full width it can get. */
+    @media (max-width: 520px) { .pipe-shot { @apply max-h-none; } }
+    /* The emoji fallback is type, not artwork: it has no background of its
+       own to clash with, so it keeps a tile to sit in. */
+    .pipe-glyph {
+        @apply flex aspect-[16/9] items-center justify-center rounded-lg
+               border border-edge-soft bg-surface2 text-[46px] leading-none;
     }
     .pipe-name { @apply mb-1 font-mono text-xs font-semibold text-ink; }
     .pipeline-card.selected .pipe-name { @apply text-accent; }

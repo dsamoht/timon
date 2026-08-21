@@ -13,6 +13,9 @@ server, and a hand-written request has to meet the same wall the "up" button
 does; the page only reacts to the refusal. Nothing in this module opens a
 file — names, sizes and dates are all that ever leave it, which matters when
 `--host` puts the server on more than loopback.
+
+What a listing says is factual: real paths, real sizes. Shortening a path for
+the eye (the leading ~) is presentation and belongs to presenters.py.
 """
 
 import os
@@ -83,14 +86,6 @@ def path_columns(pipe: dict) -> list[str]:
     return cols
 
 
-def display(path: Path) -> str:
-    """Absolute path with the home directory shortened to ~."""
-    home = Path.home()
-    if path == home or home in path.parents:
-        return str(Path("~") / path.relative_to(home))
-    return str(path)
-
-
 def _inside(path: Path) -> bool:
     return path == _ROOT or _ROOT in path.parents
 
@@ -113,7 +108,11 @@ def resolve(raw: str | None) -> Path:
 
 
 def _crumbs(path: Path) -> list[dict]:
-    """Breadcrumb trail: from the workspace inside it, from ~ or / outside."""
+    """Breadcrumb trail: from the workspace inside it, from home or / outside.
+
+    Each crumb is a real directory the browser can be sent back to; how its
+    name reads on screen (home as ~, say) is settled when it is rendered.
+    """
     if _inside(path):
         base, rel = _ROOT, path.relative_to(_ROOT)
         crumbs = [{"name": _ROOT.name or str(_ROOT), "path": str(_ROOT), "root": True}]
@@ -121,7 +120,7 @@ def _crumbs(path: Path) -> list[dict]:
         home = Path.home()
         if path == home or home in path.parents:
             base, rel = home, path.relative_to(home)
-            crumbs = [{"name": "~", "path": str(home), "root": False}]
+            crumbs = [{"name": home.name or str(home), "path": str(home), "root": False}]
         else:
             base, rel = Path(path.anchor), path.relative_to(path.anchor)
             crumbs = [{"name": path.anchor, "path": path.anchor, "root": False}]
@@ -173,15 +172,13 @@ def listing(raw: str | None = None) -> dict:
 
     parent = path.parent if path.parent != path else None
     return {
-        "path":         str(path),
-        "display":      display(path),
-        "parent":       str(parent) if parent else None,
-        "crumbs":       _crumbs(path),
-        "entries":      entries,
-        "truncated":    truncated,
-        "inside":       _inside(path),
-        "at_root":      path == _ROOT,
-        "outside_ok":   ACCESS.granted(),
-        "root":         str(_ROOT),
-        "root_display": display(_ROOT),
+        "path":       str(path),
+        "parent":     str(parent) if parent else None,
+        "crumbs":     _crumbs(path),
+        "entries":    entries,
+        "truncated":  truncated,
+        "inside":     _inside(path),
+        "at_root":    path == _ROOT,
+        "outside_ok": ACCESS.granted(),
+        "root":       str(_ROOT),
     }
