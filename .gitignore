@@ -1,9 +1,25 @@
 .venv
 uv.lock
-.python-version
-main.py
-pyproject.toml
-README
+
+# Reference data — too large to commit; point TIMON_DB_DIR at it
+data/
+
+# Runtime scratch
+imports/
+work/
+.nextflow*
+
+# Node toolchain — dev-only; the built stylesheet is committed
+node_modules/
+
+# Build artefacts
+build/
+dist/
+*.egg-info/
+__pycache__/
+
 **/.DS_Store
-timon/data
 .DS_Store
+
+# agents
+CLAUDE.md

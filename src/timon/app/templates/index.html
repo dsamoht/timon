@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>timon — local microbiomics analysis</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style/app.css') }}">
+
+</head>
+<body>
+<div class="shell">
+
+    <!-- ── TOPBAR ──────────────────────────────────────────────── -->
+    <header class="topbar">
+        <button id="menu-btn" type="button"
+                class="hidden size-9 shrink-0 cursor-pointer items-center justify-center rounded-md
+                       border border-transparent bg-transparent text-ink-muted
+                       hover:bg-surface2 hover:text-ink max-tablet:inline-flex"
+                aria-label="Toggle menu" aria-expanded="false" aria-controls="sidebar">
+            <svg class="size-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                <line x1="1" y1="4" x2="15" y2="4"/>
+                <line x1="1" y1="8" x2="15" y2="8"/>
+                <line x1="1" y1="12" x2="15" y2="12"/>
+            </svg>
+        </button>
+
+        <!-- Below the tablet tier the sidebar (and with it the brand block)
+             is a closed drawer, so the logo comes back into the topbar. -->
+        <a class="brand-mini hidden shrink-0 items-center no-underline max-tablet:flex"
+           href="#" aria-label="timon">
+            {% include '_brand.html' %}
+        </a>
+
+        <div class="min-w-0 max-tablet:hidden">
+            <h1 class="text-lg font-semibold tracking-[-0.015em] text-ink">Configuration</h1>
+            <p class="text-[11px] leading-tight text-ink-mid max-laptop:hidden">
+                Prepare a sample sheet and launch a Nextflow run
+            </p>
+        </div>
+
+        <div class="ml-auto flex shrink-0 items-center gap-2">
+            <button id="cancel-btn" onclick="cancelRun()" aria-label="Stop workflow">
+                <span class="btn-icon">■</span><span class="btn-label max-phone:hidden"> stop</span>
+            </button>
+            <button id="run-btn" aria-label="Run analysis"
+                    {{ 'disabled' if not run.can_start }}>
+                <span class="btn-icon">▶</span><span class="btn-label max-phone:hidden"> run analysis</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- ── SIDEBAR ─────────────────────────────────────────────── -->
+    <aside class="sidebar" id="sidebar">
+
+        <div class="brand">
+            <a class="no-underline" href="#" aria-label="timon">
+                {% include '_brand.html' %}
+            </a>
+        </div>
+
+        <nav class="sidebar-section mt-5 px-3">
+            <div class="sidebar-label">Navigation</div>
+            <a class="nav-item active" href="#">
+                <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                    <rect x="1" y="1" width="6" height="6" rx="1"/>
+                    <rect x="9" y="1" width="6" height="6" rx="1"/>
+                    <rect x="1" y="9" width="6" height="6" rx="1"/>
+                    <rect x="9" y="9" width="6" height="6" rx="1"/>
+                </svg>
+                configuration
+            </a>
+            <a class="nav-item" href="#">
+                <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                    <polyline points="1,11 5,5 9,8 12,4 15,7"/>
+                </svg>
+                results
+            </a>
+        </nav>
+
+        <div class="sidebar-section mt-auto px-3 pt-6 pb-5">
+            <div class="sidebar-label">Session</div>
+            <button class="btn w-full" onclick="resetAll()">reset all</button>
+        </div>
+
+    </aside>
+
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
+    <!-- ── MAIN ────────────────────────────────────────────────── -->
+    <main class="workspace">
+      <div class="workspace-inner">
+
+        <!-- ── Status strip ──────────────────────────────────────
+             Deliberately outside .section: these read-outs stay live and
+             at full contrast while a run has the rest of the page locked. -->
+        <section class="kpi-strip" aria-label="Run status">
+            <div class="kpi">
+                <div class="kpi-label">Active pipeline</div>
+                <div class="flex min-w-0 items-center gap-2">
+                    <div class="pipe-indicator {{ 'active' if run.pipeline_id }}" id="pipe-dot"></div>
+                    <span class="kpi-value" id="pipe-label">{{ run.pipeline_id or 'none' }}</span>
+                </div>
+            </div>
+
+            <div class="kpi">
+                <div class="kpi-label">Run identifier</div>
+                <div class="kpi-value" id="stat-runid">{{ run.id or '—' }}</div>
+            </div>
+
+            <div class="kpi">
+                <div class="kpi-label">Samples ready</div>
+                <div class="stat-value {% if run.n_samples > 0 %}has-data{% endif %}"
+                     id="stat-samples">{{ run.n_samples }}</div>
+            </div>
+
+            <div class="kpi">
+                <div class="kpi-label">Nextflow engine</div>
+                <div class="flex min-w-0 items-center gap-2" title="{{ engine.detail }}">
+                    <div class="pulse-dot {{ 'ok' if engine.ok else 'bad' }}"></div>
+                    <span class="kpi-value">{{ engine.label }}</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Workspace ────────────────────────────────────────── -->
+        <div class="grid min-w-0 gap-5 max-laptop:gap-4 max-compact:gap-3
+                    wide:grid-cols-[minmax(0,1fr)_minmax(420px,480px)] wide:items-start">
+
+            <div class="flex min-w-0 flex-col gap-5 max-laptop:gap-4 max-compact:gap-3">
+
+                <!-- 1. Select workflow -->
+                <section class="section card">
+                    <div class="card-head">
+                        <div class="step-num">1</div>
+                        <span class="card-title">Select workflow</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="pipe-grid">
+                            {% for pid, p in pipelines.items() %}
+                            <div class="pipeline-card {{ 'selected' if run.pipeline_id == pid }}"
+                                 data-pipe-id="{{ pid }}"
+                                 onclick="selectPipe('{{ pid }}')">
+                                <div class="relative">
+                                    <div class="pipe-icon">
+                                        {% if p.icon.endswith('.png') or p.icon.endswith('.svg') %}
+                                            <img class="pipe-shot" src="{{ url_for('static', filename=p.icon) }}" alt="{{ p.name }}">
+                                        {% else %}
+                                            <div class="pipe-glyph">{{ p.icon }}</div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="pipe-name">{{ p.name }}</div>
+                                    <div class="pipe-desc">{{ p.description }}</div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. Run configuration -->
+                <section class="section card">
+                    <div class="card-head">
+                        <div class="step-num" id="step2-num">2</div>
+                        <span class="card-title">Run configuration</span>
+                        <div class="card-actions">
+                            <button type="button" class="btn btn-edit" id="config-edit-btn"
+                                    onclick="unlockForm('config-form','config-edit-btn','step2-num')">edit</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <form id="config-form">
+                            <div class="field-grid">
+                                <div class="field-wrap">
+                                    <label class="field-label" for="exp-id">run identifier</label>
+                                    <input type="text" class="fi" id="exp-id" name="exp-id"
+                                           placeholder="e.g. bloom_survey_2026"
+                                           value="{{ run.id }}" required>
+                                </div>
+                            </div>
+
+                            <div class="mt-5 border-t border-edge-soft pt-4">
+                                <div class="mb-3 field-label">pipeline parameters</div>
+                                <div id="params-area" class="flex flex-col gap-5">
+                                    {% include '_params.html' %}
+                                </div>
+                            </div>
+
+                            <!-- Config validation errors -->
+                            <div class="error-list" id="config-errors">
+                                <div class="error-list-header">configuration errors</div>
+                                <ul id="config-error-list"></ul>
+                            </div>
+
+                            <div class="mt-4 flex justify-end gap-2">
+                                <button type="submit" class="btn btn-primary">save configuration</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- 3. Sample sheet -->
+                <section class="section card">
+                    <div class="card-head">
+                        <div class="step-num" id="step3-num">3</div>
+                        <span class="card-title">Sample sheet</span>
+                        <span class="card-sub min-w-0 flex-1 truncate max-tablet:hidden"
+                              title="the folder timon was launched in">{{ workspace }}</span>
+                        <div class="card-actions">
+                            <button class="btn" id="scan-btn">
+                                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                                    <path d="M2 4h12v10H2z"/><path d="M5 4V2h6v2"/>
+                                </svg>
+                                scan folder
+                            </button>
+                            <button class="btn btn-primary" id="add-row-btn">+ add row</button>
+                            <button type="button" class="btn btn-edit" id="sample-edit-btn"
+                                    onclick="unlockSampleSheet()">edit</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <form id="sample-form">
+                            <div id="tbl-wrap" class="tbl-wrap">
+                                <table class="samples">
+                                    <thead id="sample-thead">
+                                        <tr>
+                                            {% for col in columns %}
+                                            <th>{{ col }}</th>
+                                            {% endfor %}
+                                            <th style="width:32px;"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="sample-tbody">
+                                        {% for row in samples %}
+                                        <tr>
+                                            {% for col in columns %}
+                                            <td>
+                                                {% if col == 'date' %}
+                                                <input type="date" name="{{ col }}" value="{{ row[col] }}" required>
+                                                {% elif col in path_columns %}
+                                                <div class="cell-path">
+                                                    <input name="{{ col }}" value="{{ row[col] }}" required>
+                                                    <button type="button" class="pick-btn" onclick="openBrowser(this)"
+                                                            data-pick="files" data-label="{{ col }}"
+                                                            aria-label="browse for {{ col }}" title="browse for a file">
+                                                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"
+                                                             stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+                                                            <path d="M1.5 13V3.5h4l1.5 2h7.5V13z"/>
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                                {% else %}
+                                                <input name="{{ col }}" value="{{ row[col] }}" required>
+                                                {% endif %}
+                                            </td>
+                                            {% endfor %}
+                                            <td><button type="button" class="del-btn" onclick="delRow(this)">×</button></td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Sample sheet validation errors -->
+                            <div class="error-list" id="sample-errors">
+                                <div class="error-list-header">sample sheet errors</div>
+                                <ul id="sample-error-list"></ul>
+                            </div>
+
+                            <div class="mt-3.5 flex items-center justify-between gap-3">
+                                <span class="sample-count" id="sample-count">{{ run.n_samples }} rows</span>
+                                <button type="submit" class="btn btn-success" id="sample-save-btn">validate &amp; save</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
+            </div>
+
+            <!-- 4. Execution console — docks beside the steps on wide screens -->
+            <section class="section card console-dock">
+                <div class="card-head">
+                    <div class="step-num">4</div>
+                    <span class="card-title">Execution console</span>
+                    <div class="card-actions">
+                        <span id="term-state" class="card-sub"></span>
+                    </div>
+                </div>
+                <div class="card-body card-body-flush">
+                    <div class="terminal" id="terminal">
+                        <span class="t-dim">── waiting for launch ────────────────────────────</span><br>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+      </div>
+    </main>
+
+    <!-- A row of the shell grid rather than the last block of the scroll:
+         the year has to be on screen at all times. -->
+    <footer class="footer">
+        <span>&copy; {{ release_year }} timon</span>
+    </footer>
+</div>
+
+<!-- ── File browser ─────────────────────────────────────────
+     Opens on the launch directory. Everything above it is refused by the
+     server until the user grants it here, for this session only. -->
+<div class="fb-overlay" id="fb-overlay" hidden>
+    <div class="fb-modal" role="dialog" aria-modal="true" aria-labelledby="fb-title">
+
+        <div class="fb-head">
+            <span class="card-title" id="fb-title">Choose files</span>
+            <span class="card-sub" id="fb-target"></span>
+            <button type="button" class="fb-x" id="fb-close" aria-label="Close browser">×</button>
+        </div>
+
+        <div class="fb-bar">
+            <button type="button" class="btn" id="fb-up" aria-label="Parent folder">
+                <span id="fb-up-glyph">↑</span> up
+            </button>
+            <div class="fb-crumbs" id="fb-crumbs"></div>
+            <span class="fb-badge" id="fb-badge" hidden>outside workspace</span>
+            <button type="button" class="btn" id="fb-lock" hidden>lock to workspace</button>
+        </div>
+
+        <!-- Shown when the server refuses a path above the workspace. -->
+        <div class="fb-perm" id="fb-perm" hidden>
+            <div class="fb-perm-title">leave the workspace?</div>
+            <p class="fb-perm-body">
+                timon browses inside <code id="fb-perm-root"></code> — the folder it was
+                launched in. <code id="fb-perm-target"></code> is above it.
+                Allowing this lets this page list any folder your account can read,
+                until timon is closed. File contents are never read.
+            </p>
+            <div class="fb-perm-actions">
+                <button type="button" class="btn" id="fb-perm-cancel">stay in workspace</button>
+                <button type="button" class="btn btn-primary" id="fb-perm-allow">allow for this session</button>
+            </div>
+        </div>
+
+        <div class="fb-list" id="fb-list"></div>
+
+        <!-- The selection controls belong to the sample sheet, which takes
+             several files at once; a parameter takes one path, and a folder
+             is picked by standing in it. openBrowser() hides what the field
+             being filled has no use for. -->
+        <div class="fb-foot">
+            <label class="check-item" id="fb-seq-wrap">
+                <input type="checkbox" id="fb-seq" checked> sequence files only
+            </label>
+            <button type="button" class="btn" id="fb-all">select all shown</button>
+            <span class="card-sub" id="fb-count">0 selected</span>
+            <div class="fb-actions">
+                <button type="button" class="btn" id="fb-cancel">cancel</button>
+                <button type="button" class="btn" id="fb-use-dir" hidden>use this folder</button>
+                <button type="button" class="btn btn-primary" id="fb-use">use selection</button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Toast host -->
+<div id="toast-host" class="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2
+                            max-compact:bottom-3 max-compact:left-3 max-compact:right-3"></div>
+
+<script src="{{ url_for('static', filename='js/socket.io.js') }}"></script>
+<script>
+    const socket = io();
+    let activeCols = {{ columns | tojson }};
+    let activePathCols = {{ path_columns | tojson }};
+
+    // ── Ship's wheel ────────────────────────────────────────────
+    // The logo's wheel turns while nextflow is running, and takes a short
+    // turn whenever something went right. Both copies of the mark (sidebar
+    // and topbar) turn together — only one of the two is ever on screen.
+    const wheelEls = document.querySelectorAll('.wheel');
+    let wheelTurns = 0, wheelRunning = false;
+
+    function syncWheel() {
+        const spin = wheelRunning || wheelTurns > 0;
+        wheelEls.forEach(el => el.classList.toggle('spin', spin));
+    }
+
+    // Counted rather than restarted: updates overlap, and it is the last one
+    // to land that should decide when the wheel comes to rest. Held for as
+    // long as the toast it belongs to is on screen.
+    function turnWheel(ms = 2500) {
+        wheelTurns++;
+        syncWheel();
+        setTimeout(() => { wheelTurns--; syncWheel(); }, ms);
+    }
+
+    function setWheelRunning(on) { wheelRunning = on; syncWheel(); }
+
+    // Clicking the logo turns it. Bound on the mark rather than its anchor so
+    // the href stays a plain link target, and preventDefault keeps the '#'
+    // from scrolling the workspace back to the top.
+    document.querySelectorAll('.brand-mark').forEach(mark => {
+        mark.addEventListener('click', ev => { ev.preventDefault(); turnWheel(1400); });
+    });
+
+    // ── Toast ───────────────────────────────────────────────────
+    function toast(msg, type = 'ok') {
+        // Errors leave the wheel still: turning it on a failure would read
+        // as progress.
+        if (type !== 'err') turnWheel();
+        const el = document.createElement('div');
+        el.className = `toast ${type}`;
+        el.textContent = msg;
+        document.getElementById('toast-host').appendChild(el);
+        setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; setTimeout(() => el.remove(), 300); }, 2500);
+    }
+
+    // ── Mobile sidebar drawer ───────────────────────────────────
+    const sidebarEl   = document.getElementById('sidebar');
+    const backdropEl  = document.getElementById('sidebar-backdrop');
+    const menuBtn     = document.getElementById('menu-btn');
+    const drawerQuery = window.matchMedia('(max-width: 900px)');
+
+    function openSidebar() {
+        sidebarEl.classList.add('open');
+        backdropEl.classList.add('show');
+        menuBtn.setAttribute('aria-expanded', 'true');
+    }
+    function closeSidebar() {
+        sidebarEl.classList.remove('open');
+        backdropEl.classList.remove('show');
+        menuBtn.setAttribute('aria-expanded', 'false');
+    }
+    function toggleSidebar() {
+        sidebarEl.classList.contains('open') ? closeSidebar() : openSidebar();
+    }
+
+    menuBtn.addEventListener('click', toggleSidebar);
+    backdropEl.addEventListener('click', closeSidebar);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSidebar(); });
+    sidebarEl.querySelectorAll('.nav-item').forEach(el => el.addEventListener('click', closeSidebar));
+    // Crossing back to the docked-sidebar layout mid-session (rotating a
+    // tablet, resizing a window) shouldn't leave the drawer stuck open
+    // underneath what is now a statically positioned sidebar.
+    drawerQuery.addEventListener('change', e => { if (!e.matches) closeSidebar(); });
+
+    // ── Helpers ─────────────────────────────────────────────────
+    function setRunReady(ready) {
+        document.getElementById('run-btn').disabled = !ready;
+    }
+
+    function updateRowCount() {
+        const n = document.querySelectorAll('#sample-tbody tr').length;
+        const el = document.getElementById('sample-count');
+        el.textContent = `${n} rows`;
+        el.classList.remove('validated');
+    }
+
+    function setValidatedCount(n) {
+        const el = document.getElementById('sample-count');
+        el.textContent = `${n} samples ready`;
+        el.classList.add('validated');
+        const sv = document.getElementById('stat-samples');
+        sv.textContent = n;
+        sv.classList.toggle('has-data', n > 0);
+    }
+
+    function showErrors(listId, wrapperId, errors) {
+        const ul = document.getElementById(listId);
+        const wrap = document.getElementById(wrapperId);
+        ul.innerHTML = errors.map(e => `<li>${e}</li>`).join('');
+        wrap.classList.toggle('show', errors.length > 0);
+    }
+
+    function clearErrors(listId, wrapperId) {
+        document.getElementById(listId).innerHTML = '';
+        document.getElementById(wrapperId).classList.remove('show');
+    }
+
+    const PICK_ICON = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none"
+             stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+             <path d="M1.5 13V3.5h4l1.5 2h7.5V13z"/></svg>`;
+
+    function buildRow(cols, data = {}) {
+        let cells = cols.map(c => {
+            const type = c === 'date' ? 'date' : 'text';
+            const input = `<input type="${type}" name="${c}" value="${data[c] || ''}" required>`;
+            if (!activePathCols.includes(c)) return `<td>${input}</td>`;
+            return `<td><div class="cell-path">${input}` +
+                   `<button type="button" class="pick-btn" onclick="openBrowser(this)" ` +
+                   `data-pick="files" data-label="${c}" ` +
+                   `aria-label="browse for ${c}" title="browse for a file">${PICK_ICON}</button></div></td>`;
+        }).join('');
+        return `<tr>${cells}<td><button type="button" class="del-btn" onclick="delRow(this)">×</button></td></tr>`;
+    }
+
+    function rebuildTable(cols, rows = []) {
+        let hdr = cols.map(c => `<th>${c}</th>`).join('') + '<th style="width:32px;"></th>';
+        document.getElementById('sample-thead').innerHTML = `<tr>${hdr}</tr>`;
+        document.getElementById('sample-tbody').innerHTML = rows.map(r => buildRow(cols, r)).join('');
+        updateRowCount();
+    }
+
+    // ── Lock / unlock section forms ──────────────────────────────
+    function lockForm(formId, editBtnId, stepNumId) {
+        document.getElementById(formId).classList.add('form-locked');
+        document.getElementById(editBtnId).style.display = 'inline-flex';
+        if (stepNumId) document.getElementById(stepNumId).classList.add('done');
+    }
+
+    function unlockForm(formId, editBtnId, stepNumId) {
+        document.getElementById(formId).classList.remove('form-locked');
+        document.getElementById(editBtnId).style.display = 'none';
+        if (stepNumId) document.getElementById(stepNumId).classList.remove('done');
+    }
+
+    function lockSampleSheet() {
+        document.getElementById('tbl-wrap').classList.add('tbl-locked');
+        document.getElementById('sample-edit-btn').style.display = 'inline-flex';
+        document.getElementById('add-row-btn').style.display = 'none';
+        document.getElementById('scan-btn').style.display = 'none';
+        document.getElementById('sample-save-btn').style.display = 'none';
+        document.getElementById('step3-num').classList.add('done');
+    }
+
+    function unlockSampleSheet() {
+        document.getElementById('tbl-wrap').classList.remove('tbl-locked');
+        document.getElementById('sample-edit-btn').style.display = 'none';
+        document.getElementById('add-row-btn').style.display = 'inline-flex';
+        document.getElementById('scan-btn').style.display = 'inline-flex';
+        document.getElementById('sample-save-btn').style.display = 'inline-flex';
+        document.getElementById('step3-num').classList.remove('done');
+        // Reset validated count back to row count until re-saved
+        updateRowCount();
+        // Invalidate run-ready state since the sheet is now being edited
+        setRunReady(false);
+    }
+
+    // The parameter fields are rendered by the server from _params.html for
+    // both the initial page and a pipeline switch, so there is no second
+    // implementation of the form here to keep in step with it.
+    function setParams(html) {
+        document.getElementById('params-area').innerHTML = html;
+        syncParams();
+    }
+
+    // ── parameter dependencies ──────────────────────────────────
+    //
+    // Which parameters a run still uses is decided by config.py's
+    // "active_when" and settled by model/params.py's inactive_ids(); the fields carry
+    // their condition as data-active-when so the page can follow a box being
+    // ticked without a round trip. Only the evaluation is duplicated here —
+    // the rules themselves stay in the pipeline entry.
+    //
+    // Hidden, never disabled: a hidden field keeps submitting the value it
+    // held, so unticking "skip QC" brings the thresholds back as they were,
+    // and the server drops what the run does not use anyway.
+    function paramValues() {
+        const vals = {};
+        document.querySelectorAll('#params-area [name]').forEach(el => {
+            vals[el.name] = el.type === 'checkbox' ? el.checked : el.value;
+        });
+        return vals;
+    }
+
+    function paramMatches(value, wanted) {
+        return wanted.some(w => w === value || String(w) === String(value));
+    }
+
+    function syncParams() {
+        const area = document.getElementById('params-area');
+        if (!area) return;
+        const vals  = paramValues();
+        const items = Array.from(area.querySelectorAll('[data-param]'));
+        const off   = new Set();
+        // A parameter can hang off one that is itself switched off ("skip
+        // Nanoplot" under "skip QC"), so this settles rather than evaluating
+        // once; each pass can only add, so it terminates.
+        for (;;) {
+            const dropped = items.filter(el =>
+                !off.has(el.dataset.param) && el.dataset.activeWhen &&
+                Object.entries(JSON.parse(el.dataset.activeWhen)).some(
+                    ([key, wanted]) => off.has(key) || !paramMatches(vals[key], wanted)));
+            if (!dropped.length) break;
+            dropped.forEach(el => off.add(el.dataset.param));
+        }
+        items.forEach(el => { el.hidden = off.has(el.dataset.param); });
+
+        // A grid, a checkbox row or a whole section with nothing left in it is
+        // a heading for a step this run does not take.
+        area.querySelectorAll('.field-grid, .check-row, .param-section').forEach(box => {
+            const own = Array.from(box.querySelectorAll('[data-param]'));
+            const live = own.filter(el => !el.hidden);
+            box.hidden = own.length > 0 && live.length === 0;
+            const count = box.querySelector('.param-section-count');
+            if (count) count.textContent = live.length;
+        });
+    }
+
+    // Delegated from the form, which outlives the fields: setParams() replaces
+    // them wholesale on a pipeline switch.
+    document.getElementById('config-form').addEventListener('change', syncParams);
+
+    function termLine(html) {
+        const t = document.getElementById('terminal');
+        t.innerHTML += html + '<br>';
+        t.scrollTop = t.scrollHeight;
+    }
+
+    // ── 1. Pipeline selection ───────────────────────────────────
+    function selectPipe(id) {
+        const fd = new FormData();
+        fd.append('pipeline_select', id);
+        fetch('/set_pipeline', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.ok) { toast(data.error, 'err'); return; }
+                document.querySelectorAll('.pipeline-card').forEach(c => c.classList.remove('selected'));
+                document.querySelector(`.pipeline-card[data-pipe-id="${id}"]`).classList.add('selected');
+                document.getElementById('pipe-label').textContent = id;
+                document.getElementById('pipe-dot').classList.add('active');
+                activeCols = data.columns;
+                activePathCols = data.path_columns;
+                setParams(data.params_html);
+                rebuildTable(data.columns);
+                // Reset forms to editable state on pipeline switch
+                unlockForm('config-form', 'config-edit-btn', 'step2-num');
+                unlockSampleSheet();
+                clearErrors('config-error-list', 'config-errors');
+                clearErrors('sample-error-list', 'sample-errors');
+                setRunReady(false);
+                toast(`pipeline → ${id}`);
+            })
+            .catch(() => toast('failed to switch pipeline', 'err'));
+    }
+
+    // ── 2. Config form ──────────────────────────────────────────
+    document.getElementById('config-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        clearErrors('config-error-list', 'config-errors');
+
+        const fd = new FormData(this);
+        fetch('/get_run_info_base', { method: 'POST', body: fd })
+            .then(r => r.json().then(data => ({ ok: r.ok, data })))
+            .then(({ ok, data }) => {
+                if (!ok || !data.ok) {
+                    showErrors('config-error-list', 'config-errors', data.errors || [data.error]);
+                    toast(data.error || 'validation failed', 'err');
+                    return;
+                }
+                setRunReady(data.can_start);
+                document.getElementById('stat-runid').textContent = data.id || '—';
+                lockForm('config-form', 'config-edit-btn', 'step2-num');
+                toast('configuration saved');
+            })
+            .catch(() => toast('failed to save config', 'err'));
+    });
+
+    // ── 3. Sample sheet ─────────────────────────────────────────
+    document.getElementById('add-row-btn').addEventListener('click', () => {
+        document.getElementById('sample-tbody').insertAdjacentHTML('beforeend', buildRow(activeCols));
+        updateRowCount();
+    });
+
+    function delRow(btn) {
+        btn.closest('tr').remove();
+        updateRowCount();
+    }
+
+    document.getElementById('sample-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        clearErrors('sample-error-list', 'sample-errors');
+        const fd = new FormData(this);
+        fetch('/update_samples', { method: 'POST', body: fd })
+            .then(r => r.json().then(data => ({ ok: r.ok, data })))
+            .then(({ ok, data }) => {
+                if (!ok || !data.ok) {
+                    showErrors('sample-error-list', 'sample-errors', data.errors || [data.error]);
+                    toast(data.error || 'validation failed', 'err');
+                    return;
+                }
+                setValidatedCount(data.n_samples);
+                setRunReady(data.can_start);
+                lockSampleSheet();
+                toast('sample sheet validated & saved');
+            })
+            .catch(() => toast('failed to save sample sheet', 'err'));
+    });
+
+    document.getElementById('scan-btn').addEventListener('click', () => {
+        fetch('/refresh_sample_sheet')
+            .then(r => r.json())
+            .then(data => {
+                if (!data.ok) { toast('scan failed', 'err'); return; }
+                activeCols = data.columns;
+                rebuildTable(data.columns, data.rows);
+                clearErrors('sample-error-list', 'sample-errors');
+                toast(`${data.rows.length} sample(s) detected — review then save`);
+            })
+            .catch(() => toast('scan failed', 'err'));
+    });
+
+    // ── File browser ────────────────────────────────────────────
+    // Opens on the launch directory, the way a notebook does. Anything
+    // above it is refused by the server; the panel this shows is that
+    // refusal put to the user, so the rule has one implementation and it
+    // is not this one.
+    const fb = {
+        input:    null,      // the field being filled
+        label:    '',
+        mode:     'files',   // what that field takes; see FB_MODES
+        dir:      null,      // the listing on screen
+        visible:  [],        // what the filter left of it
+        pending:  null,      // path waiting on a permission answer
+        selected: new Set(),
+    };
+
+    // The same browser fills two kinds of field, and they want different
+    // things of it. A sample-sheet column takes any number of read files,
+    // collapsed into one pattern; a path parameter takes exactly one path,
+    // and what kind of path is declared in config.py ("path": dir/file/any)
+    // and carried here on the button's data-pick.
+    const FB_MODES = {
+        files: { title: 'Choose files',           multi: true  },
+        file:  { title: 'Choose a file',          multi: false },
+        dir:   { title: 'Choose a folder',        multi: false },
+        any:   { title: 'Choose a file or folder', multi: false },
+    };
+    const fbMode = () => FB_MODES[fb.mode] || FB_MODES.files;
+
+    const fbEl = id => document.getElementById(id);
+
+    function fbEscape(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function fbSize(n) {
+        if (n === null || n === undefined) return '';
+        const units = ['B', 'K', 'M', 'G', 'T'];
+        let v = n, i = 0;
+        while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+        return (i === 0 ? v : v.toFixed(1)) + units[i];
+    }
+
+    function openBrowser(btn) {
+        fb.input = btn.closest('.cell-path').querySelector('input');
+        fb.mode  = btn.dataset.pick || 'files';
+        fb.label = btn.dataset.label || fb.input.name;
+        fb.selected.clear();
+        const mode = fbMode();
+
+        fbEl('fb-title').textContent  = mode.title;
+        fbEl('fb-target').textContent = '→ ' + fb.label;
+        // The sequence-file filter, and selecting a whole folder's worth at
+        // once, are both about reads. A reference database is a directory or
+        // a tarball, and the filter would hide exactly the thing being
+        // looked for.
+        fbEl('fb-seq-wrap').hidden = !mode.multi;
+        fbEl('fb-all').hidden      = !mode.multi;
+        fbEl('fb-count').hidden    = fb.mode === 'dir';
+        fbEl('fb-use').hidden      = fb.mode === 'dir';
+        // A folder is navigated into rather than clicked, so picking the one
+        // on screen needs a button of its own.
+        fbEl('fb-use-dir').hidden  = fb.mode !== 'dir' && fb.mode !== 'any';
+        fbEl('fb-use-dir').classList.toggle('btn-primary', fb.mode === 'dir');
+
+        fbEl('fb-overlay').hidden = false;
+        document.body.classList.add('modal-open');
+
+        // Re-picking starts where the field already points rather than back
+        // at the root. Whether the value names a folder or a file is not
+        // knowable here, so both are tried before falling back to the root:
+        // a stale — or no longer permitted — path must not open with an
+        // error or a permission prompt in the user's face.
+        const current = fb.input.value.trim();
+        const parent  = current ? current.replace(/\/[^\/]*$/, '') : '';
+        const tries = (mode.multi ? [parent] : [current, parent]).filter(Boolean);
+        tries.push(null);
+        fbLoad(tries.shift(), { fallbacks: tries });
+    }
+
+    function closeBrowser() {
+        fbEl('fb-overlay').hidden = true;
+        fbEl('fb-perm').hidden = true;
+        document.body.classList.remove('modal-open');
+        fb.input = null;
+        fb.pending = null;
+        fb.selected.clear();
+        fb.mode = 'files';
+    }
+
+    // opts.fallbacks: folders to try in turn if this one cannot be opened,
+    // ending at the workspace root. Only the opening load has any — a folder
+    // the user clicked on and cannot read is worth saying so about.
+    function fbLoad(path, opts = {}) {
+        const fallbacks = opts.fallbacks || [];
+        const retry = () => fbLoad(fallbacks[0], { fallbacks: fallbacks.slice(1) });
+        fetch('/browse?path=' + encodeURIComponent(path || ''))
+            .then(r => r.json().then(data => ({ status: r.status, data })))
+            .then(({ status, data }) => {
+                if (status === 403 && data.needs_permission) {
+                    if (fallbacks.length) { retry(); return; }
+                    fbAsk(data);
+                    return;
+                }
+                if (!data.ok) {
+                    if (fallbacks.length) { retry(); return; }
+                    toast(data.error || 'cannot open that folder', 'err');
+                    return;
+                }
+                fbEl('fb-perm').hidden = true;
+                fb.pending = null;
+                fb.dir = data;
+                // Selection is per folder: a wildcard only means something
+                // inside one directory, so carrying it across a move would
+                // quietly produce a comma-joined list instead.
+                fb.selected.clear();
+                fbRender();
+            })
+            .catch(() => {
+                if (fallbacks.length) { retry(); return; }
+                toast('cannot open that folder', 'err');
+            });
+    }
+
+    function fbAsk(data) {
+        fb.pending = data.path;
+        fbEl('fb-perm-root').textContent   = data.root_display;
+        fbEl('fb-perm-target').textContent = data.display;
+        fbEl('fb-perm').hidden = false;
+    }
+
+    function fbRender() {
+        const d = fb.dir;
+
+        // Only the ends of a deep path say anything; the middle is folded
+        // into one crumb that still navigates to where it was cut.
+        const crumbs = d.crumbs.length > 5
+            ? [d.crumbs[0], { name: '…', path: d.crumbs[d.crumbs.length - 4].path },
+               ...d.crumbs.slice(-3)]
+            : d.crumbs;
+        fbEl('fb-crumbs').innerHTML = crumbs.map(c =>
+            `<button type="button" class="fb-crumb${c.root ? ' root' : ''}" ` +
+            `data-path="${fbEscape(c.path)}">${fbEscape(c.name)}</button>`
+        ).join('<span class="fb-sep">/</span>');
+        fbEl('fb-crumbs').querySelectorAll('.fb-crumb').forEach(b =>
+            b.addEventListener('click', () => fbLoad(b.dataset.path)));
+
+        fbEl('fb-badge').hidden = d.inside;
+        fbEl('fb-lock').hidden  = !d.outside_ok;
+        fbEl('fb-up').disabled  = !d.parent;
+        // At the workspace root without a grant, "up" is the click that has
+        // to be asked for. Say so on the button instead of after the fact.
+        fbEl('fb-up-glyph').textContent = (d.at_root && !d.outside_ok) ? '⇧' : '↑';
+        fbEl('fb-up').classList.toggle('locked', d.at_root && !d.outside_ok);
+
+        const mode = fbMode();
+        const seqOnly = mode.multi && fbEl('fb-seq').checked;
+        // Files still show while a folder is being picked — seeing what is in
+        // it is half of recognising it — but they are not selectable.
+        const pickFiles = fb.mode !== 'dir';
+        fb.visible = d.entries.filter(e => e.dir || !seqOnly || e.seq);
+
+        if (!fb.visible.length) {
+            const why = !d.entries.length ? 'this folder is empty'
+                : seqOnly ? 'no sequence files here — untick the filter to see everything'
+                : 'nothing to show here';
+            fbEl('fb-list').innerHTML = `<div class="fb-empty">${why}</div>`;
+        } else {
+            fbEl('fb-list').innerHTML = fb.visible.map((e, i) => e.dir
+                ? `<div class="fb-row dir" data-i="${i}">
+                       <span class="fb-ico">▸</span>
+                       <span class="fb-name">${fbEscape(e.name)}</span>
+                   </div>`
+                : `<div class="fb-row file${e.seq ? ' seq' : ''}${pickFiles ? '' : ' inert'}" data-i="${i}" data-path="${fbEscape(e.path)}">
+                       <span class="fb-ico">${e.seq ? '≡' : '·'}</span>
+                       <span class="fb-name">${fbEscape(e.name)}</span>
+                       <span class="fb-meta">${fbSize(e.size)}</span>
+                   </div>`
+            ).join('') + (d.truncated
+                ? `<div class="fb-empty">${d.truncated} more not shown — this folder is very large</div>`
+                : '');
+
+            fbEl('fb-list').querySelectorAll('.fb-row').forEach(row => {
+                const entry = fb.visible[row.dataset.i];
+                if (entry.dir) {
+                    row.addEventListener('click', () => fbLoad(entry.path));
+                } else if (pickFiles) {
+                    row.addEventListener('click', () => {
+                        const on = fb.selected.has(entry.path);
+                        // Everywhere but the sample sheet the field holds one
+                        // path, so a click moves the selection rather than
+                        // adding to it.
+                        if (!mode.multi) fb.selected.clear();
+                        on ? fb.selected.delete(entry.path)
+                           : fb.selected.add(entry.path);
+                        fbSync();
+                    });
+                    // Picking one file is the common case, and asking for a
+                    // click and then a second click on "use" for it is a lot.
+                    row.addEventListener('dblclick', () => {
+                        fb.selected.clear();
+                        fb.selected.add(entry.path);
+                        fbUse();
+                    });
+                }
+            });
+        }
+        fbSync();
+    }
+
+    function fbSync() {
+        fbEl('fb-count').textContent = `${fb.selected.size} selected`;
+        fbEl('fb-use').disabled = fb.selected.size === 0;
+        fbEl('fb-list').querySelectorAll('.fb-row.file').forEach(row =>
+            row.classList.toggle('sel', fb.selected.has(row.dataset.path)));
+    }
+
+    // The server resolves what was picked — one path, or several collapsed
+    // into a pattern — because model.convert_realpaths_to_wildcards is what
+    // the folder scan already uses and a second implementation here could
+    // disagree with it.
+    function fbApply(paths, noun) {
+        const fd = new FormData();
+        paths.forEach(p => fd.append('paths', p));
+        const n = paths.length, label = fb.label, input = fb.input;
+        fetch('/browse_pick', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.ok) { toast(data.error || 'could not use that selection', 'err'); return; }
+                input.value = data.value;
+                // A parameter can switch others on or off, and the form only
+                // follows a change event (see syncParams).
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+                closeBrowser();
+                toast(n === 1 ? `${noun} → ${label}` : `${n} files → ${label} (as one pattern)`);
+            })
+            .catch(() => toast('could not use that selection', 'err'));
+    }
+
+    function fbUse() {
+        if (!fb.input || !fb.selected.size) return;
+        fbApply([...fb.selected], 'file');
+    }
+
+    // Picks the folder on screen, which is the one the crumbs name.
+    function fbUseDir() {
+        if (!fb.input || !fb.dir) return;
+        fbApply([fb.dir.path], 'folder');
+    }
+
+    fbEl('fb-up').addEventListener('click', () => { if (fb.dir) fbLoad(fb.dir.parent); });
+    fbEl('fb-seq').addEventListener('change', () => { if (fb.dir) fbRender(); });
+    fbEl('fb-use').addEventListener('click', fbUse);
+    fbEl('fb-use-dir').addEventListener('click', fbUseDir);
+    fbEl('fb-cancel').addEventListener('click', closeBrowser);
+    fbEl('fb-close').addEventListener('click', closeBrowser);
+    fbEl('fb-overlay').addEventListener('click', e => {
+        if (e.target === fbEl('fb-overlay')) closeBrowser();
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && !fbEl('fb-overlay').hidden) closeBrowser();
+    });
+
+    fbEl('fb-all').addEventListener('click', () => {
+        const files = fb.visible.filter(e => !e.dir);
+        const allOn = files.length && files.every(e => fb.selected.has(e.path));
+        files.forEach(e => allOn ? fb.selected.delete(e.path) : fb.selected.add(e.path));
+        fbSync();
+    });
+
+    fbEl('fb-perm-allow').addEventListener('click', () => {
+        const target = fb.pending;
+        fetch('/browse_allow_outside', { method: 'POST' })
+            .then(r => r.json())
+            .then(() => {
+                fbEl('fb-perm').hidden = true;
+                fbLoad(target);
+                toast('browsing outside the workspace allowed for this session');
+            })
+            .catch(() => toast('could not grant access', 'err'));
+    });
+
+    fbEl('fb-perm-cancel').addEventListener('click', () => {
+        fbEl('fb-perm').hidden = true;
+        fb.pending = null;
+    });
+
+    fbEl('fb-lock').addEventListener('click', () => {
+        fetch('/browse_lock_workspace', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => { fbLoad(data.root); toast('locked back to the workspace'); })
+            .catch(() => toast('could not lock the browser', 'err'));
+    });
+
+    // ── 4. Run / stop ───────────────────────────────────────────
+    // The run button's label is split into icon/text spans so narrow
+    // viewports can hide just the text (see .btn-label at ≤480px) without
+    // losing the accessible name — textContent alone couldn't do that.
+    function setRunBtnState(icon, label, ariaLabel) {
+        const btn = document.getElementById('run-btn');
+        btn.querySelector('.btn-icon').textContent = icon;
+        btn.querySelector('.btn-label').textContent = ' ' + label;
+        btn.setAttribute('aria-label', ariaLabel);
+    }
+
+    function lockApp() {
+        setWheelRunning(true);
+        document.querySelector('.shell').classList.add('app-locked');
+        document.getElementById('cancel-btn').style.display = 'inline-flex';
+        document.getElementById('run-btn').classList.add('running');
+        setRunBtnState('⟳', 'running', 'Workflow running');
+        document.getElementById('run-btn').disabled = true;
+        document.getElementById('term-state').textContent = '● running';
+        document.getElementById('term-state').style.color = 'var(--color-amber)';
+    }
+
+    function unlockApp(state) {
+        setWheelRunning(false);
+        document.querySelector('.shell').classList.remove('app-locked');
+        document.getElementById('cancel-btn').style.display = 'none';
+        const btn = document.getElementById('run-btn');
+        btn.classList.remove('running');
+        btn.disabled = false;
+        if (state === 'done') {
+            setRunBtnState('▶', 'run again', 'Run analysis again');
+            document.getElementById('term-state').textContent = '✓ complete';
+            document.getElementById('term-state').style.color = 'var(--color-green)';
+        } else {
+            setRunBtnState('▶', 'run analysis', 'Run analysis');
+            document.getElementById('term-state').textContent = '✗ stopped';
+            document.getElementById('term-state').style.color = 'var(--color-red)';
+        }
+    }
+
+    document.getElementById('run-btn').addEventListener('click', function() {
+        document.getElementById('terminal').innerHTML =
+            '<span class="t-dim">── launching nextflow ───────────────────────────────────</span><br>';
+        lockApp();
+        socket.emit('run_workflow');
+    });
+
+    function cancelRun() {
+        const confirmed = confirm(
+            'Stop the running workflow?\n\nNextflow will be killed immediately. ' +
+            'Partial outputs may be incomplete. This cannot be undone.'
+        );
+        if (!confirmed) return;
+        socket.emit('cancel_workflow');
+    }
+
+    socket.on('workflow_output', function(msg) {
+        const t = document.getElementById('terminal');
+        const line = msg.data
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/\[ERROR\]/g,   '<span class="t-red">[ERROR]</span>')
+            .replace(/\[WARN\]/g,    '<span class="t-amber">[WARN]</span>')
+            .replace(/\[.*?DONE.*?\]/gi, match => `<span class="t-green">${match}</span>`)
+            .replace(/(N E X T F L O W)/g, '<span class="t-blue">$1</span>');
+        t.innerHTML += line;
+        t.scrollTop = t.scrollHeight;
+    });
+
+    socket.on('finish', function() {
+        unlockApp('done');
+        termLine('<span class="t-green">── pipeline finished ────────────────────────────────────</span>');
+    });
+
+    socket.on('workflow_cancelled', function() {
+        unlockApp('cancelled');
+        termLine('<span class="t-red">── workflow stopped by user ─────────────────────────────</span>');
+    });
+
+    // ── Reset ────────────────────────────────────────────────────
+    function resetAll() {
+        if (!confirm('Reset all configuration and samples?')) return;
+        fetch('/reset_all')
+            .then(r => r.json())
+            .then(data => { if (data.ok) location.reload(); });
+    }
+
+    // ── Restore locked state on page load if already configured ──
+    (function restoreState() {
+        syncParams();
+        {% if run.configured %}
+            lockForm('config-form', 'config-edit-btn', 'step2-num');
+        {% endif %}
+        {% if run.n_samples > 0 %}
+            lockSampleSheet();
+            setValidatedCount({{ run.n_samples }});
+        {% endif %}
+    })();
+</script>
+</body>
+</html>

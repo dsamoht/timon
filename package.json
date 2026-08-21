@@ -1,0 +1,13 @@
+{
+  "name": "timon-styles",
+  "private": true,
+  "description": "Dev-only toolchain: builds the Tailwind stylesheet that ships in the Python wheel. End users never need Node.",
+  "scripts": {
+    "build": "tailwindcss -i styles/app.css -o src/timon/app/static/style/app.css --minify",
+    "watch": "tailwindcss -i styles/app.css -o src/timon/app/static/style/app.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.0.0",
+    "tailwindcss": "^4.0.0"
+  }
+}
