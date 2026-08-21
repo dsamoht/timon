@@ -1,9 +1,8 @@
 # timon
 
-**T**oolkit of **I**ntegrated **M**icrobi**O**me analysis with support for **N**anopore data.
+**t**oolkit of **i**ntegrated **m**icrobi**o**me analysis with support for lo**n**g reads.
 
-timon is a local web app that prepares and launches Nextflow pipelines for
-long-read microbiome analysis. It works like a Jupyter notebook: you install it
+timon is a local web app that prepares and launches Nextflow pipelines microbiome analysis. It works like a Jupyter notebook: you install it
 once, `cd` into the folder you want to work in, and run `timon`.
 
 ```console
