@@ -1165,14 +1165,14 @@
     // whole line it turned out to be.
     function termPaint(line) {
         const text = line._text, cls = line._cls;
-        const fixed = line._fixed;
+        const pinnedCls = line._fixed;
         const raw = text.join('');
         // A program that coloured its own output has said what it means;
         // timon's reading is for the lines that arrive plain.
-        const coloured = !fixed && cls.some(Boolean);
-        line.className = ('term-line ' + (fixed || (coloured ? '' : termClass(raw)))).trim();
+        const coloured = !pinnedCls && cls.some(Boolean);
+        line.className = ('term-line ' + (pinnedCls || (coloured ? '' : termClass(raw)))).trim();
         line.textContent = '';
-        if (fixed) { line.textContent = raw; return; }
+        if (pinnedCls) { line.textContent = raw; return; }
         if (!coloured) { termTokens(line, raw); return; }
         let start = 0;
         for (let c = 1; c <= text.length; c++) {

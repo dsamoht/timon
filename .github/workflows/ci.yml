@@ -80,8 +80,11 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Committed stylesheet matches styles/app.css
+        # The output is minified onto one line, so a plain diff prints the
+        # whole stylesheet twice; one rule per line shows only what changed.
         run: |
-          git diff --exit-code src/timon/app/static/style/app.css || {
-            echo "::error::src/timon/app/static/style/app.css is stale — run 'npm run build' and commit the result"
-            exit 1
-          }
+          css=src/timon/app/static/style/app.css
+          git diff --quiet "$css" && exit 0
+          diff <(git show "HEAD:$css" | tr '}' '\n') <(tr '}' '\n' < "$css") || true
+          echo "::error file=$css::stale — run 'npm run build' and commit the result"
+          exit 1
