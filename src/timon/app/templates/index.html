@@ -32,10 +32,8 @@
         </a>
 
         <div class="min-w-0 max-tablet:hidden">
-            <h1 class="text-lg font-semibold tracking-[-0.015em] text-ink">Configuration</h1>
-            <p class="text-[11px] leading-tight text-ink-mid max-laptop:hidden">
-                Prepare a sample sheet and launch a Nextflow run
-            </p>
+            <h1 class="text-lg font-semibold tracking-[-0.015em] text-ink"
+                id="view-title">Configuration</h1>
         </div>
 
         <div class="ml-auto flex shrink-0 items-center gap-2">
@@ -58,9 +56,9 @@
             </a>
         </div>
 
-        <nav class="sidebar-section mt-5 px-3">
+        <nav class="sidebar-section sidebar-nav mt-5 px-3">
             <div class="sidebar-label">Navigation</div>
-            <a class="nav-item active" href="#">
+            <a class="nav-item active" href="#" data-view="config">
                 <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                     <rect x="1" y="1" width="6" height="6" rx="1"/>
                     <rect x="9" y="1" width="6" height="6" rx="1"/>
@@ -69,18 +67,20 @@
                 </svg>
                 configuration
             </a>
-            <a class="nav-item" href="#">
+            <a class="nav-item" href="#" data-view="runs">
+                <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                    <circle cx="8" cy="8" r="6.5"/>
+                    <polyline points="8,4 8,8 11,10"/>
+                </svg>
+                runs
+            </a>
+            <a class="nav-item" href="#" data-view="results">
                 <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                     <polyline points="1,11 5,5 9,8 12,4 15,7"/>
                 </svg>
                 results
             </a>
         </nav>
-
-        <div class="sidebar-section mt-auto px-3 pt-6 pb-5">
-            <div class="sidebar-label">Session</div>
-            <button class="btn w-full" onclick="resetAll()">reset all</button>
-        </div>
 
     </aside>
 
@@ -99,6 +99,7 @@
                 <div class="flex min-w-0 items-center gap-2">
                     <div class="pipe-indicator {{ 'active' if run.pipeline_id }}" id="pipe-dot"></div>
                     <span class="kpi-value" id="pipe-label">{{ run.pipeline_id or 'none' }}</span>
+                    <span class="pipe-rev" id="pipe-rev">{{ run.revision }}</span>
                 </div>
             </div>
 
@@ -120,34 +121,108 @@
                     <span class="kpi-value">{{ engine.label }}</span>
                 </div>
             </div>
+
+            <!-- The engine every task actually runs inside. Read the same way
+                 as nextflow's beside it, because it is the same question: a
+                 run with no container engine starts, downloads a pipeline and
+                 dies in its first task, so it is said here instead. -->
+            <div class="kpi">
+                <div class="kpi-label">Container engine</div>
+                <div class="flex min-w-0 items-center gap-2" title="{{ container.detail }}">
+                    <div class="pulse-dot {{ 'ok' if container.ok else 'bad' }}"></div>
+                    <span class="kpi-value">{{ container.label }}</span>
+                </div>
+            </div>
         </section>
 
-        <!-- ── Workspace ────────────────────────────────────────── -->
+        <!-- ── Workspace ──────────────────────────────────────────
+             Two views, one page: configuring a run, and reading what one
+             wrote. Hidden rather than unloaded, so the console keeps
+             printing while the outputs are being browsed. -->
+        <div id="view-config">
         <div class="grid min-w-0 gap-5 max-laptop:gap-4 max-compact:gap-3
                     wide:grid-cols-[minmax(0,1fr)_minmax(420px,480px)] wide:items-start">
 
             <div class="flex min-w-0 flex-col gap-5 max-laptop:gap-4 max-compact:gap-3">
+
+                <!-- 0. Reference databases. Installed once, into timon's own
+                     data directory, and found there by every pipeline — so
+                     the button is the first thing a fresh install offers, a
+                     run that reads a missing one cannot start, and once they
+                     are all there the button is frozen. Everything in it is
+                     drawn from presenters.databases_view. Not a .section: a
+                     download goes on while a run locks the page, and has to
+                     stay stoppable. -->
+                <section class="card db-card" id="db-card" aria-labelledby="db-title">
+                    <div class="card-head">
+                        <div class="step-num {{ 'done' if databases.installed }}" id="db-step"
+                             aria-hidden="true">{{ '✓' if databases.installed else '0' }}</div>
+                        <span class="card-title" id="db-title">Reference databases</span>
+                        <div class="card-actions">
+                            <button type="button" class="btn btn-primary" id="db-install-btn"
+                                    onclick="dbInstall()"
+                                    {{ 'disabled' if databases.installed or not databases.can_install }}>
+                                {{ 'installed' if databases.installed else 'install databases' }}</button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <!-- What is standing between this configuration and
+                             a run. Amber, like every other errand on the page. -->
+                        <div class="db-note" id="db-note" hidden>
+                            <span class="restart-line">
+                                <span class="restart-mark" aria-hidden="true">⚠</span>
+                                <span id="db-note-text"></span>
+                            </span>
+                        </div>
+                        <div id="db-list"></div>
+                        <div class="db-foot card-sub" id="db-foot"></div>
+                    </div>
+                </section>
 
                 <!-- 1. Select workflow -->
                 <section class="section card">
                     <div class="card-head">
                         <div class="step-num">1</div>
                         <span class="card-title">Select workflow</span>
+                        <div class="card-actions">
+                            <!-- Shown only for a pipeline that ships a test
+                                 profile of its own (config.py "test_profile"),
+                                 and hidden again when the choice moves to one
+                                 that does not — see setCanTest(). -->
+                            <button type="button" class="btn" id="test-btn"
+                                    style="display:{{ 'inline-flex' if run.can_test else 'none' }}"
+                                    title="run this pipeline's own test data, ignoring the configuration below"
+                                    onclick="startTest()">quick test</button>
+                        </div>
                     </div>
                     <div class="card-body">
-                        <div class="pipe-grid">
+                        <!-- A reopened run, pinned to what it ran with
+                             (Experiment.restore): the workflow, the form and
+                             the sheet are locked, so running again repeats
+                             that run and its error is the run's own. Editing
+                             is offered, but as leaving the run behind. -->
+                        <div class="pinned-note" id="pinned-note" hidden>
+                            <span class="restart-line">
+                                <span class="pinned-mark" aria-hidden="true">⟲</span>
+                                <span id="pinned-text"></span>
+                            </span>
+                            <button type="button" class="btn" onclick="unpinRun()"
+                                    title="unlock the workflow, configuration and samples — running afterwards no longer repeats this run exactly">edit</button>
+                        </div>
+
+                        <div class="pipe-list">
                             {% for pid, p in pipelines.items() %}
                             <div class="pipeline-card {{ 'selected' if run.pipeline_id == pid }}"
                                  data-pipe-id="{{ pid }}"
                                  onclick="selectPipe('{{ pid }}')">
-                                <div class="relative">
-                                    <div class="pipe-icon">
-                                        {% if p.icon.endswith('.png') or p.icon.endswith('.svg') %}
-                                            <img class="pipe-shot" src="{{ url_for('static', filename=p.icon) }}" alt="{{ p.name }}">
-                                        {% else %}
-                                            <div class="pipe-glyph">{{ p.icon }}</div>
-                                        {% endif %}
-                                    </div>
+                                <div class="pipe-icon">
+                                    {% if p.icon.endswith('.png') or p.icon.endswith('.svg') %}
+                                        <img class="pipe-shot" src="{{ url_for('static', filename=p.icon) }}" alt="{{ p.name }}">
+                                    {% else %}
+                                        <div class="pipe-glyph">{{ p.icon }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="pipe-text">
                                     <div class="pipe-name">{{ p.name }}</div>
                                     <div class="pipe-desc">{{ p.description }}</div>
                                 </div>
@@ -168,7 +243,11 @@
                         </div>
                     </div>
                     <div class="card-body">
-                        <form id="config-form">
+                        <!-- novalidate: a folded or inactive section can hold a field the
+                             browser would refuse, and it would do so silently, pointing
+                             at nothing on screen. Numbers are checked by the page as
+                             they are typed and by the server on save. -->
+                        <form id="config-form" novalidate>
                             <div class="field-grid">
                                 <div class="field-wrap">
                                     <label class="field-label" for="exp-id">run identifier</label>
@@ -176,6 +255,24 @@
                                            placeholder="e.g. bloom_survey_2026"
                                            value="{{ run.id }}" required>
                                 </div>
+                            </div>
+
+                            <!-- An identifier that already names a run. The
+                                 server decides whether there is one and
+                                 whether nextflow can still continue it; this
+                                 is only ever told (see presenters.restart_view).
+                                 The box is in the form whether or not it is on
+                                 screen, so a save always says what this run
+                                 means by it. -->
+                            <div class="restart-note" id="restart-note" hidden>
+                                <span class="restart-line">
+                                    <span class="restart-mark" aria-hidden="true">⚠</span>
+                                    <span id="restart-text"></span>
+                                </span>
+                                <label class="check-item" id="restart-resume-wrap" hidden>
+                                    <input type="checkbox" id="resume" name="resume" checked>
+                                    continue it — finished steps are reused
+                                </label>
                             </div>
 
                             <div class="mt-5 border-t border-edge-soft pt-4">
@@ -206,7 +303,8 @@
                         <span class="card-sub min-w-0 flex-1 truncate max-tablet:hidden"
                               title="the folder timon was launched in">{{ workspace }}</span>
                         <div class="card-actions">
-                            <button class="btn" id="scan-btn">
+                            <button class="btn" id="scan-btn" data-start="{{ input_folder }}"
+                                    title="choose a folder to look for reads in">
                                 <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
                                     <path d="M2 4h12v10H2z"/><path d="M5 4V2h6v2"/>
                                 </svg>
@@ -283,16 +381,92 @@
                     <span class="card-title">Execution console</span>
                     <div class="card-actions">
                         <span id="term-state" class="card-sub"></span>
+                        <!-- Clears what is on screen only: the run and the tail
+                             watching its log go on, and output keeps arriving. -->
+                        <button type="button" class="btn" id="term-clear-btn" onclick="termClear()"
+                                title="clear the console (the run keeps going)" aria-label="Clear console">clear</button>
+                        <button type="button" class="btn" id="results-jump">browse results</button>
                     </div>
                 </div>
                 <div class="card-body card-body-flush">
                     <div class="terminal" id="terminal">
-                        <span class="t-dim">── waiting for launch ────────────────────────────</span><br>
+                        <div class="term-line t-dim">── waiting for launch ──</div>
                     </div>
                 </div>
             </section>
 
         </div>
+        </div>
+
+        <!-- ── Runs ──────────────────────────────────────────────────
+             Every run this workspace remembers, newest first. A run is its
+             output folder plus the note timon left in it, so this list is
+             exactly what is on disk: delete a folder and the run leaves
+             here with it. Reopening one puts it back exactly as it ran and
+             holds it there, so running a failed run again repeats that run
+             rather than whatever the form says now. -->
+        <div id="view-runs" hidden>
+            <section class="section card runs-card">
+                <div class="card-head">
+                    <span class="card-title">Runs</span>
+                    <span class="card-sub min-w-0 flex-1 truncate" id="runs-sub"></span>
+                    <div class="card-actions">
+                        <button type="button" class="btn" id="runs-refresh">refresh</button>
+                    </div>
+                </div>
+                <div class="card-body card-body-flush">
+                    <div class="runs-list" id="runs-list">
+                        <div class="fb-empty">reading the workspace…</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- A run survives the timon that started it, so one launched
+                 in another folder is still going and is still the user's
+                 to watch, and to stop from the console once watched. It has no record here — a run is
+                 remembered in the folder it writes — so it is listed
+                 apart, from the pointer it left behind. Hidden entirely
+                 when there is nothing running elsewhere, which is almost
+                 always. -->
+            <section class="section card runs-card" id="runs-elsewhere-card" hidden>
+                <div class="card-head">
+                    <span class="card-title">Running elsewhere</span>
+                    <span class="card-sub min-w-0 flex-1 truncate">
+                        started in another folder on this machine
+                    </span>
+                </div>
+                <div class="card-body card-body-flush">
+                    <div class="runs-list" id="runs-elsewhere"></div>
+                </div>
+            </section>
+        </div>
+
+        <!-- ── Results ──────────────────────────────────────────────
+             A run writes a folder, and what a pipeline puts in it is its
+             own business — so this walks the folder rather than claiming
+             to know what a result is. Figures, reports, tables and text
+             open where they are; anything else is a download. -->
+        <div id="view-results" hidden>
+            <section class="section card results-card">
+                <div class="card-head">
+                    <span class="card-title">Results</span>
+                    <span class="card-sub rs-path" id="rs-path"></span>
+                    <div class="card-actions">
+                        <button type="button" class="btn" id="rs-up">↑ up</button>
+                        <button type="button" class="btn" id="rs-refresh">refresh</button>
+                    </div>
+                </div>
+                <div class="fb-bar">
+                    <div class="fb-crumbs" id="rs-crumbs"></div>
+                </div>
+                <div class="card-body card-body-flush">
+                    <div class="rs-list" id="rs-list">
+                        <div class="fb-empty">reading the output folder…</div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
       </div>
     </main>
 
@@ -355,6 +529,32 @@
                 <button type="button" class="btn" id="fb-cancel">cancel</button>
                 <button type="button" class="btn" id="fb-use-dir" hidden>use this folder</button>
                 <button type="button" class="btn btn-primary" id="fb-use">use selection</button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- ── Result viewer ───────────────────────────────────────
+     A figure, a report, a matrix or a text file, shown where it lies. An
+     HTML report is framed in a sandbox: it is the pipeline's markup, not
+     timon's, and it has no business reaching the page that framed it. -->
+<div class="fb-overlay" id="rv-overlay" hidden>
+    <div class="fb-modal rv-modal" role="dialog" aria-modal="true" aria-labelledby="rv-title">
+
+        <div class="fb-head">
+            <span class="card-title" id="rv-title">file</span>
+            <span class="card-sub" id="rv-sub"></span>
+            <button type="button" class="fb-x" id="rv-close" aria-label="Close viewer">&times;</button>
+        </div>
+
+        <div class="rv-body" id="rv-body"></div>
+
+        <div class="fb-foot">
+            <span class="card-sub" id="rv-note"></span>
+            <div class="fb-actions">
+                <a class="btn" id="rv-tab" target="_blank" rel="noopener noreferrer">open in a tab</a>
+                <a class="btn btn-primary" id="rv-download">download</a>
             </div>
         </div>
 
@@ -590,19 +790,491 @@
             const own = Array.from(box.querySelectorAll('[data-param]'));
             const live = own.filter(el => !el.hidden);
             box.hidden = own.length > 0 && live.length === 0;
-            const count = box.querySelector('.param-section-count');
-            if (count) count.textContent = live.length;
+        });
+        syncResets();
+        // A reset or a pipeline switch replaces values without an input event.
+        document.querySelectorAll('#params-area input[data-number]').forEach(markNumber);
+    }
+
+    // Puts one section back to the defaults the server rendered into it
+    // (data-default), hidden fields included: a field the run does not use
+    // right now is still a value the section would otherwise carry into the
+    // next save. Nothing is sent — the form is saved the way it always is.
+    function resetSection(event, btn) {
+        // The button sits in a <summary>, whose click would fold the section.
+        event.preventDefault();
+        event.stopPropagation();
+        const section = btn.closest('.param-section');
+        section.querySelectorAll('[data-default]').forEach(el => {
+            const value = JSON.parse(el.dataset.default);
+            if (el.type === 'checkbox') el.checked = !!value;
+            else el.value = value == null ? '' : String(value);
+        });
+        syncParams();
+    }
+
+    // A reset with nothing to put back is shown disabled, so the button also
+    // says whether a section has been changed from the pipeline's defaults.
+    function syncResets() {
+        document.querySelectorAll('#params-area .param-section').forEach(section => {
+            const btn = section.querySelector('.param-reset');
+            if (!btn) return;
+            btn.disabled = !Array.from(section.querySelectorAll('[data-default]')).some(el => {
+                const value = JSON.parse(el.dataset.default);
+                if (el.type === 'checkbox') return el.checked !== !!value;
+                // "90" and "90.0" are the same threshold: compare as numbers
+                // once both sides are readable ones.
+                if ('number' in el.dataset && value != null && PLAIN_DECIMAL.test(el.value.trim()))
+                    return Number(el.value) !== Number(value);
+                return el.value.trim() !== (value == null ? '' : String(value));
+            });
         });
     }
+
+    // ── numeric parameters ──────────────────────────────────────
+    //
+    // What a number may be is model.validation's rule (params.parse_number),
+    // and the save is refused there whatever the page lets through. The
+    // page's part is to make a bad value hard to type and plain to see before
+    // anything is sent, reading the bounds the server rendered onto the
+    // field — only the evaluation is repeated here, as with the dependencies
+    // above.
+    //
+    // The fields are text, not type="number" (see _params.html), so nothing
+    // here is the browser's idea of a number: "." is the only decimal
+    // separator, and a value is exactly what is on screen.
+    const PLAIN_DECIMAL = /^-?\d+(?:\.\d+)?$/;
+
+    function numberProblem(el) {
+        const raw = el.value.trim();
+        if (raw === '') return 'required' in el.dataset ? 'required' : '';
+        if (raw.includes(',')) return 'use "." as the decimal separator';
+        if (raw.length > 20 || !PLAIN_DECIMAL.test(raw)) return 'enter a plain number, e.g. 0.5';
+        const n   = Number(raw);
+        const min = el.dataset.min === undefined ? 0 : Number(el.dataset.min);
+        const max = el.dataset.max === undefined ? Infinity : Number(el.dataset.max);
+        if (el.dataset.number === 'int' && !Number.isInteger(n)) return 'must be a whole number';
+        if (n < min || n > max) {
+            // Thousands grouped with a narrow space, never a comma: a comma in
+            // a message about decimals would read as one.
+            const fmt = v => Number.isInteger(v)
+                ? String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : String(v);
+            return max === Infinity ? `must be ≥ ${fmt(min)}` : `must be between ${fmt(min)} and ${fmt(max)}`;
+        }
+        return '';
+    }
+
+    function markNumber(el) {
+        const problem = numberProblem(el);
+        const note = document.getElementById(`${el.id}-err`);
+        el.classList.toggle('fi-bad', !!problem);
+        el.setAttribute('aria-invalid', problem ? 'true' : 'false');
+        if (note) { note.textContent = problem; note.hidden = !problem; }
+        return problem;
+    }
+
+    // The numbers a save would be refused over: those the run uses. A field
+    // hidden by a dependency is dropped by the server and so is not held
+    // against the form here either.
+    function badNumbers() {
+        return Array.from(document.querySelectorAll('#params-area input[data-number]'))
+            .map(el => ({ el, problem: markNumber(el) }))
+            .filter(({ el, problem }) => problem && !el.closest('[hidden]'));
+    }
+
+    // Puts text where the caret is as if it had been typed, so the checks
+    // and the reset button hear about it the same way.
+    function insertInto(el, text) {
+        el.setRangeText(text, el.selectionStart, el.selectionEnd, 'end');
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    const numbersArea = document.getElementById('config-form');
+    // Characters that cannot be part of an acceptable value never get in.
+    // beforeinput rather than keydown: a phone keyboard reports its keys as
+    // "Unidentified".
+    numbersArea.addEventListener('beforeinput', e => {
+        const el = e.target;
+        if (!el.matches('input[data-number]') || e.inputType !== 'insertText' || !e.data) return;
+        const decimal = el.dataset.number === 'float';
+        const negative = Number(el.dataset.min) < 0;
+        // What stays of the value once the typed text replaces the selection.
+        const kept = el.value.slice(0, el.selectionStart) + el.value.slice(el.selectionEnd);
+        const ok = [...e.data].every(ch =>
+            /[0-9]/.test(ch) ||
+            (ch === '.' && decimal && !kept.includes('.')) ||
+            (ch === '-' && negative && el.selectionStart === 0 && !kept.includes('-')));
+        if (ok) return;
+        e.preventDefault();
+        // A comma keypad (a French phone, a numpad in a comma locale) has no
+        // "." key: its separator goes in as the one timon reads, rather than
+        // leaving that user no way to type a fraction at all.
+        if (e.data === ',' && decimal && !kept.includes('.')) insertInto(el, '.');
+    });
+    // A paste is taken whole or not at all, and never reinterpreted: "1,000"
+    // could be a thousand or one, so it is refused rather than guessed at.
+    numbersArea.addEventListener('paste', e => {
+        const el = e.target;
+        if (!el.matches('input[data-number]')) return;
+        e.preventDefault();
+        const text = (e.clipboardData?.getData('text/plain') || '').trim();
+        if (PLAIN_DECIMAL.test(text)) insertInto(el, text);
+        else toast('only a plain number can be pasted here, with "." for decimals', 'err');
+    });
+    numbersArea.addEventListener('drop', e => {
+        if (e.target.matches('input[data-number]')) e.preventDefault();
+    });
+    numbersArea.addEventListener('input', e => {
+        if (e.target.matches('input[data-number]')) markNumber(e.target);
+    });
 
     // Delegated from the form, which outlives the fields: setParams() replaces
     // them wholesale on a pipeline switch.
     document.getElementById('config-form').addEventListener('change', syncParams);
+    // A text field only reports 'change' once it loses focus.
+    document.getElementById('config-form').addEventListener('input', syncResets);
 
-    function termLine(html) {
-        const t = document.getElementById('terminal');
-        t.innerHTML += html + '<br>';
+    // ── The console ─────────────────────────────────────────────
+    //
+    // A terminal, as far as a <div> can be one. Output arrives in chunks
+    // that respect neither line boundaries nor escape sequences, and what it
+    // says is not only text: a carriage return goes back to the start of the
+    // line, a cursor move goes back up the screen, and erase-line clears what
+    // was there. Nextflow is launched with -ansi-log true, and the table it
+    // draws is exactly that — every update moves up over the block it drew
+    // last and writes it again. Appended rather than obeyed, a run of an hour
+    // is the same block printed a thousand times.
+    //
+    // So the console keeps a cursor over its lines, and every character is
+    // written into a cell at that cursor with the attributes in force when it
+    // was written. Attributes belong to the stream, not to a line: nextflow
+    // turns red at the top of an error report and back thirty lines later.
+    //
+    // Colour comes from two places. A program that writes ANSI codes has
+    // chosen its own, and those are honoured. A line that arrives plain —
+    // timon's own, or a tool's that does not colour — is coloured by timon's
+    // reading of it (TERM_RULES below).
+    const term = {
+        el: null,
+        row: 0,           // the line the cursor is on; one past the last is a line not yet started
+        col: 0,
+        floor: 0,         // the highest line output may move back up to
+        sgr: null,        // the attributes the next character is written in
+        pen: '',          // …as the classes they become
+        pending: '',      // an escape sequence the chunk ended in the middle of
+        dirty: new Set(),
+    };
+    // Old output is dropped rather than kept: a run of any length would
+    // otherwise put tens of thousands of elements on the page, and nobody
+    // scrolls back that far into a nextflow log.
+    const TERM_SCROLLBACK = 4000;
+    // The width nextflow draws for when its output is not a terminal. It
+    // counts the lines it goes back up over as a screen that wide would wrap
+    // them, so the console has to wrap at the same place: a work directory
+    // path is two rows to nextflow, and taken as one, the next redraw of its
+    // table lands a row too high.
+    const TERM_COLS = 80;
+
+    function termEl() {
+        return term.el || (term.el = document.getElementById('terminal'));
+    }
+
+    // Follow the output only while the user is already at the bottom —
+    // scrolling up to read something has to survive the next line arriving.
+    function termAtBottom() {
+        const t = termEl();
+        return t.scrollHeight - t.scrollTop - t.clientHeight < 40;
+    }
+
+    function sgrReset() {
+        return { colour: '', bold: false, dim: false, italic: false, underline: false };
+    }
+
+    function termClear() {
+        termEl().innerHTML = '';
+        term.row = term.col = term.floor = 0;
+        term.sgr = sgrReset();
+        term.pen = '';
+        term.pending = '';
+        term.dirty.clear();
+    }
+    term.sgr = sgrReset();
+
+    // The line at a row, made — with every line above it — if it is not there yet.
+    function termLineAt(row) {
+        const t = termEl();
+        while (t.children.length <= row) {
+            const line = document.createElement('div');
+            line.className = 'term-line';
+            line._text = [];
+            line._cls = [];
+            t.appendChild(line);
+        }
+        return t.children[row];
+    }
+
+    function termTrim() {
+        const t = termEl();
+        if (t.children.length <= TERM_SCROLLBACK) return;
+        for (let i = 0; i < 500 && t.firstChild; i++) t.removeChild(t.firstChild);
+        term.row = Math.max(0, term.row - 500);
+        term.floor = Math.max(0, term.floor - 500);
+    }
+
+    // One whole line, written by timon rather than by a run. Always below
+    // everything, and never under a run's cursor again: a nextflow table
+    // moving up from the middle of a log the console came in on must stop
+    // at the header saying which run it is, not write over it.
+    function termLine(text, cls) {
+        const t = termEl();
+        const line = termLineAt(t.children.length);
+        line._text = Array.from(text);
+        line._cls = line._text.map(() => '');
+        line._fixed = cls || '';
+        termPaint(line);
+        term.row = term.floor = t.children.length;
+        term.col = 0;
+        termTrim();
         t.scrollTop = t.scrollHeight;
+    }
+
+    // An escape sequence, whole: CSI (cursor, erase, colour), OSC (titles,
+    // hyperlinks), a character-set switch, or any other two-byte one.
+    const TERM_ESC = /\x1b(?:\[([0-?]*)[ -\/]*([@-~])|\][^\x07\x1b]*(?:\x07|\x1b\\)|[()][0-9A-Za-z]|[^\[\]()])/y;
+    // …and the start of one, cut off where the chunk ended. An OSC 8 link
+    // carries a whole file path, so a cut one is kept however long it is.
+    const TERM_ESC_OPEN = /\x1b(?:\[[0-?]*[ -\/]*|\][^\x07\x1b]*\x1b?|[()])?$/y;
+    const TERM_PLAIN = /[^\x00-\x1f\x7f]+/y;
+
+    // What arrived from the run, with the cursor moved where it says.
+    function termFeed(text) {
+        const t = termEl();
+        const stick = termAtBottom();
+        text = term.pending + text;
+        term.pending = '';
+        let i = 0;
+        while (i < text.length) {
+            const ch = text[i];
+            if (ch === '\x1b') {
+                TERM_ESC.lastIndex = i;
+                const m = TERM_ESC.exec(text);
+                if (m) {
+                    if (m[2]) termCsi(m[2], m[1] || '');
+                    i = TERM_ESC.lastIndex;
+                    continue;
+                }
+                TERM_ESC_OPEN.lastIndex = i;
+                if (TERM_ESC_OPEN.test(text)) { term.pending = text.slice(i); break; }
+                i++;
+                continue;
+            }
+            if (ch === '\n') {
+                // A newline with nothing written on its line is a blank line
+                // the program printed, and it has to take up a line.
+                termLineAt(term.row);
+                term.row++;
+                term.col = 0;
+            } else if (ch === '\r') {
+                term.col = 0;
+            } else if (ch === '\b') {
+                term.col = Math.max(0, term.col - 1);
+            } else if (ch === '\t') {
+                term.col = Math.min(TERM_COLS - 1, (Math.floor(term.col / 8) + 1) * 8);
+            } else if (ch >= ' ' && ch !== '\x7f') {
+                TERM_PLAIN.lastIndex = i;
+                const run = TERM_PLAIN.exec(text)[0];
+                termWrite(run);
+                i += run.length;
+                continue;
+            }
+            // Any other control character (a bell, most often) is not text.
+            i++;
+        }
+        termTrim();
+        for (const line of term.dirty) if (line.isConnected) termPaint(line);
+        term.dirty.clear();
+        if (stick) t.scrollTop = t.scrollHeight;
+    }
+
+    function termWrite(text) {
+        let line = termLineAt(term.row);
+        const pad = () => { while (line._text.length < term.col) { line._text.push(' '); line._cls.push(''); } };
+        pad();
+        for (const ch of text) {
+            // Wrapped the way a terminal wraps: only when there is a
+            // character to put past the edge, so a line of exactly the full
+            // width followed by a newline is one row, not two.
+            if (term.col >= TERM_COLS) {
+                term.dirty.add(line);
+                term.row++;
+                term.col = 0;
+                line = termLineAt(term.row);
+            }
+            line._text[term.col] = ch;
+            line._cls[term.col] = term.pen;
+            term.col++;
+        }
+        term.dirty.add(line);
+    }
+
+    // The sequences a command-line tool redraws its output with. Absolute
+    // positioning and clearing the screen are left alone: they address a
+    // screen of a fixed size, and this console is a scrollback.
+    function termCsi(final, params) {
+        if (final === 'm') {
+            ansiApply(term.sgr, params);
+            term.pen = sgrClasses(term.sgr);
+            return;
+        }
+        if (/^[<=>?]/.test(params)) return;   // cursor visibility and other modes
+        const n = parseInt(params, 10);
+        const count = Number.isNaN(n) || n < 1 ? 1 : n;
+        const line = () => term.row < termEl().children.length ? termEl().children[term.row] : null;
+        switch (final) {
+        case 'A': term.row = Math.max(term.floor, term.row - count); break;
+        case 'B': term.row += count; break;
+        case 'E': term.row += count; term.col = 0; break;
+        case 'F': term.row = Math.max(term.floor, term.row - count); term.col = 0; break;
+        case 'C': term.col = Math.min(TERM_COLS - 1, term.col + count); break;
+        case 'D': term.col = Math.max(0, term.col - count); break;
+        case 'G': term.col = Math.min(TERM_COLS - 1, count - 1); break;
+        case 'K': {
+            const l = line();
+            if (!l) break;
+            const mode = Number.isNaN(n) ? 0 : n;
+            if (mode === 0) { l._text.length = l._cls.length = Math.min(l._text.length, term.col); }
+            else if (mode === 1) { for (let c = 0; c <= term.col && c < l._text.length; c++) { l._text[c] = ' '; l._cls[c] = ''; } }
+            else if (mode === 2) { l._text = []; l._cls = []; }
+            term.dirty.add(l);
+            break;
+        }
+        case 'J': {
+            // Only "erase below": what is above the cursor is scrollback.
+            if (!Number.isNaN(n) && n !== 0) break;
+            const t = termEl();
+            const l = line();
+            if (l) { l._text.length = l._cls.length = Math.min(l._text.length, term.col); term.dirty.add(l); }
+            while (t.children.length > term.row + 1) t.removeChild(t.lastChild);
+            break;
+        }
+        }
+    }
+
+    // Repainted from its cells rather than appended to, so a line that
+    // arrives in pieces, or is written over, is read — and coloured — as the
+    // whole line it turned out to be.
+    function termPaint(line) {
+        const text = line._text, cls = line._cls;
+        const fixed = line._fixed;
+        const raw = text.join('');
+        // A program that coloured its own output has said what it means;
+        // timon's reading is for the lines that arrive plain.
+        const coloured = !fixed && cls.some(Boolean);
+        line.className = ('term-line ' + (fixed || (coloured ? '' : termClass(raw)))).trim();
+        line.textContent = '';
+        if (fixed) { line.textContent = raw; return; }
+        if (!coloured) { termTokens(line, raw); return; }
+        let start = 0;
+        for (let c = 1; c <= text.length; c++) {
+            if (c < text.length && cls[c] === cls[start]) continue;
+            const chunk = text.slice(start, c).join('');
+            if (cls[start]) {
+                const span = document.createElement('span');
+                span.className = cls[start];
+                span.textContent = chunk;
+                line.appendChild(span);
+            } else {
+                line.appendChild(document.createTextNode(chunk));
+            }
+            start = c;
+        }
+    }
+
+    // ── what a log line is about ────────────────────────────────
+    // For the lines nobody coloured: timon's own, the command line in the
+    // banner, a tool that writes plain text. First match wins, so the
+    // failure report is read before the run summary that shares words with it.
+    const TERM_RULES = [
+        [/^\s*(ERROR|Command error|Caused by)\b/i,                      't-red'],
+        [/^\s*WARN\b/i,                                                 't-amber'],
+        [/^\s*N E X T F L O W/,                                         't-green'],
+        [/^\s*\[CMD\]/,                                                 't-blue'],
+        [/^\s*(executor|Monitor|Pulling|Staging|Uploading|Downloading)\b/, 't-dim'],
+        [/^\s*(Launching|Completed at|Duration|CPU hours|Succeeded|Cached|Ignored|Failed|Command (executed|exit status|output)|Work dir|Tip)\b/, 't-dim'],
+    ];
+
+    function termClass(text) {
+        for (const [pattern, cls] of TERM_RULES) if (pattern.test(text)) return cls;
+        return '';
+    }
+
+    // Inside an otherwise plain line: the task hash, the progress and the
+    // mark nextflow ends a process line with. Enough to find a process at a
+    // glance without painting the line a colour it has not earned.
+    const TERM_TOKENS = /(\[[0-9a-f]{2}\/[0-9a-f]{6,}\])|(\[\s*\d+%\s*\])|([✔✓])|([✘✗✖])/g;
+    const TERM_TOKEN_CLASSES = ['t-dim', 't-blue', 't-green', 't-red'];
+
+    function termTokens(line, text) {
+        let at = 0;
+        TERM_TOKENS.lastIndex = 0;
+        for (let m; (m = TERM_TOKENS.exec(text)) !== null; ) {
+            if (m.index > at) line.appendChild(document.createTextNode(text.slice(at, m.index)));
+            const which = m.slice(1).findIndex(group => group !== undefined);
+            const span = document.createElement('span');
+            span.className = TERM_TOKEN_CLASSES[which];
+            span.textContent = m[0];
+            line.appendChild(span);
+            at = m.index + m[0].length;
+        }
+        if (at < text.length) line.appendChild(document.createTextNode(text.slice(at)));
+    }
+
+    // ── ANSI colour ─────────────────────────────────────────────
+    const ANSI_COLOURS = ['black', 'red', 'green', 'yellow',
+                          'blue', 'magenta', 'cyan', 'white'];
+
+    function sgrClasses(state) {
+        const classes = [];
+        if (state.colour)    classes.push('a-' + state.colour);
+        if (state.bold)      classes.push('a-bold');
+        if (state.dim)       classes.push('a-dim');
+        if (state.italic)    classes.push('a-italic');
+        if (state.underline) classes.push('a-underline');
+        return classes.join(' ');
+    }
+
+    function ansiApply(state, params) {
+        const codes = (params || '0').split(';').map(raw => parseInt(raw || '0', 10));
+        for (let k = 0; k < codes.length; k++) {
+            const code = codes[k];
+            if (code === 0) Object.assign(state, sgrReset());
+            else if (code === 1)  state.bold = true;
+            else if (code === 2)  state.dim = true;
+            else if (code === 3)  state.italic = true;
+            else if (code === 4)  state.underline = true;
+            else if (code === 22) state.bold = state.dim = false;
+            else if (code === 23) state.italic = false;
+            else if (code === 24) state.underline = false;
+            else if (code === 39) state.colour = '';
+            else if (code >= 30 && code <= 37) state.colour = ANSI_COLOURS[code - 30];
+            else if (code >= 90 && code <= 97) state.colour = 'br-' + ANSI_COLOURS[code - 90];
+            else if (code === 38 || code === 48) {
+                // Extended colour: its arguments are read past whether or not
+                // it is rendered, or "38;5;34" would be taken for blue. Of
+                // these only the sixteen-colour foregrounds are kept;
+                // backgrounds, 256-colour and true-colour are not, since a
+                // tool's choice of them on this surface is as likely to hide
+                // text as to help.
+                if (codes[k + 1] === 5) {
+                    const idx = codes[k + 2];
+                    if (code === 38 && idx < 8)       state.colour = ANSI_COLOURS[idx];
+                    else if (code === 38 && idx < 16) state.colour = 'br-' + ANSI_COLOURS[idx - 8];
+                    k += 2;
+                } else if (codes[k + 1] === 2) {
+                    k += 4;
+                }
+            }
+        }
     }
 
     // ── 1. Pipeline selection ───────────────────────────────────
@@ -616,7 +1288,10 @@
                 document.querySelectorAll('.pipeline-card').forEach(c => c.classList.remove('selected'));
                 document.querySelector(`.pipeline-card[data-pipe-id="${id}"]`).classList.add('selected');
                 document.getElementById('pipe-label').textContent = id;
+                document.getElementById('pipe-rev').textContent = data.revision || '';
                 document.getElementById('pipe-dot').classList.add('active');
+                setCanTest(data.can_test);
+                dbApply(data.databases);
                 activeCols = data.columns;
                 activePathCols = data.path_columns;
                 setParams(data.params_html);
@@ -626,6 +1301,7 @@
                 unlockSampleSheet();
                 clearErrors('config-error-list', 'config-errors');
                 clearErrors('sample-error-list', 'sample-errors');
+                applyRestart(data.restart);
                 setRunReady(false);
                 toast(`pipeline → ${id}`);
             })
@@ -637,6 +1313,22 @@
         e.preventDefault();
         clearErrors('config-error-list', 'config-errors');
 
+        // Refused before the round trip, and shown where the field is: a
+        // number in a folded section is unfolded rather than named from afar.
+        const bad = badNumbers();
+        if (bad.length) {
+            showErrors('config-error-list', 'config-errors', bad.map(({ el, problem }) => {
+                const label = el.closest('.field-wrap').querySelector('.field-label').firstChild.textContent.trim();
+                return `'${label}' ${problem === 'required' ? 'is required' : problem}`;
+            }));
+            const first = bad[0].el;
+            const fold = first.closest('details');
+            if (fold) fold.open = true;
+            first.focus();
+            toast('fix the highlighted numbers', 'err');
+            return;
+        }
+
         const fd = new FormData(this);
         fetch('/get_run_info_base', { method: 'POST', body: fd })
             .then(r => r.json().then(data => ({ ok: r.ok, data })))
@@ -647,7 +1339,11 @@
                     return;
                 }
                 setRunReady(data.can_start);
+                dbApply(data.databases);
                 document.getElementById('stat-runid').textContent = data.id || '—';
+                // Only now does the server know which identifier this is, and
+                // so whether there is a run of that name to continue.
+                applyRestart(data.restart);
                 lockForm('config-form', 'config-edit-btn', 'step2-num');
                 toast('configuration saved');
             })
@@ -685,17 +1381,30 @@
             .catch(() => toast('failed to save sample sheet', 'err'));
     });
 
-    document.getElementById('scan-btn').addEventListener('click', () => {
-        fetch('/refresh_sample_sheet')
+    // Reads are rarely left in the folder timon was started in, so the scan
+    // asks where to look first. The picker opens on the last folder scanned,
+    // else the input folder, else the workspace — whichever still opens.
+    let lastScanned = '';
+
+    function scanFolder(path) {
+        fetch('/refresh_sample_sheet?path=' + encodeURIComponent(path))
             .then(r => r.json())
             .then(data => {
-                if (!data.ok) { toast('scan failed', 'err'); return; }
+                if (!data.ok) { toast(data.error || 'scan failed', 'err'); return; }
+                lastScanned = path;
+                closeBrowser();
                 activeCols = data.columns;
                 rebuildTable(data.columns, data.rows);
                 clearErrors('sample-error-list', 'sample-errors');
                 toast(`${data.rows.length} sample(s) detected — review then save`);
             })
             .catch(() => toast('scan failed', 'err'));
+    }
+
+    document.getElementById('scan-btn').addEventListener('click', function () {
+        fbOpen({ mode: 'dir', label: 'sample sheet', action: 'scan this folder',
+                 onPick: scanFolder,
+                 start: [lastScanned, this.dataset.start] });
     });
 
     // ── File browser ────────────────────────────────────────────
@@ -705,6 +1414,7 @@
     // is not this one.
     const fb = {
         input:    null,      // the field being filled
+        onPick:   null,      // or, instead of a field, what to do with the folder
         label:    '',
         mode:     'files',   // what that field takes; see FB_MODES
         dir:      null,      // the listing on screen
@@ -742,9 +1452,25 @@
     }
 
     function openBrowser(btn) {
-        fb.input = btn.closest('.cell-path').querySelector('input');
-        fb.mode  = btn.dataset.pick || 'files';
-        fb.label = btn.dataset.label || fb.input.name;
+        const input   = btn.closest('.cell-path').querySelector('input');
+        const mode    = btn.dataset.pick || 'files';
+        // Re-picking starts where the field already points rather than back
+        // at the root. Whether the value names a folder or a file is not
+        // knowable here, so both are tried: a sample-sheet pattern is never
+        // a folder, so only its parent is.
+        const current = input.value.trim();
+        const parent  = current ? current.replace(/\/[^\/]*$/, '') : '';
+        fbOpen({ input, mode, label: btn.dataset.label || input.name,
+                 start: FB_MODES[mode]?.multi ? [parent] : [current, parent] });
+    }
+
+    // opts: input (a field to fill) or onPick (a folder callback), mode,
+    // label, and start — folders to try opening on, in order.
+    function fbOpen(opts) {
+        fb.input  = opts.input || null;
+        fb.onPick = opts.onPick || null;
+        fb.mode   = opts.mode || 'files';
+        fb.label  = opts.label || '';
         fb.selected.clear();
         const mode = fbMode();
 
@@ -762,18 +1488,15 @@
         // on screen needs a button of its own.
         fbEl('fb-use-dir').hidden  = fb.mode !== 'dir' && fb.mode !== 'any';
         fbEl('fb-use-dir').classList.toggle('btn-primary', fb.mode === 'dir');
+        fbEl('fb-use-dir').textContent = opts.action || 'use this folder';
 
         fbEl('fb-overlay').hidden = false;
         document.body.classList.add('modal-open');
 
-        // Re-picking starts where the field already points rather than back
-        // at the root. Whether the value names a folder or a file is not
-        // knowable here, so both are tried before falling back to the root:
-        // a stale — or no longer permitted — path must not open with an
-        // error or a permission prompt in the user's face.
-        const current = fb.input.value.trim();
-        const parent  = current ? current.replace(/\/[^\/]*$/, '') : '';
-        const tries = (mode.multi ? [parent] : [current, parent]).filter(Boolean);
+        // Every start is tried before falling back to the root: a stale — or
+        // no longer permitted — path must not open with an error or a
+        // permission prompt in the user's face.
+        const tries = (opts.start || []).filter(Boolean);
         tries.push(null);
         fbLoad(tries.shift(), { fallbacks: tries });
     }
@@ -783,6 +1506,7 @@
         fbEl('fb-perm').hidden = true;
         document.body.classList.remove('modal-open');
         fb.input = null;
+        fb.onPick = null;
         fb.pending = null;
         fb.selected.clear();
         fb.mode = 'files';
@@ -944,7 +1668,11 @@
 
     // Picks the folder on screen, which is the one the crumbs name.
     function fbUseDir() {
-        if (!fb.input || !fb.dir) return;
+        if (!fb.dir) return;
+        // The scan is handed the folder itself; it closes the browser once
+        // the scan has answered, so a refusal leaves the user where they were.
+        if (fb.onPick) { fb.onPick(fb.dir.path); return; }
+        if (!fb.input) return;
         fbApply([fb.dir.path], 'folder');
     }
 
@@ -992,7 +1720,259 @@
             .catch(() => toast('could not lock the browser', 'err'));
     });
 
-    // ── 4. Run / stop ───────────────────────────────────────────
+    // ── Reference databases ─────────────────────────────────────
+    // A run reads databases this machine may not have, and getting them
+    // is the same errand every time: find the publisher's URL, wait for
+    // some gigabytes, unpack them, point the pipeline at what came out.
+    // The server does all of it (model/downloads.py) and lands each one
+    // where timon looks, so nothing has to be pointed anywhere afterwards;
+    // this half says what is there, offers the one button, and asks again
+    // while something is arriving.
+    //
+    // It asks rather than being told because a download belongs to the
+    // timon process and not to the machine — unlike a run, there is
+    // nothing here that outlives the server, so there is nothing for a
+    // socket to recover.
+
+    let dbView = {{ databases | tojson }};
+    let dbTimer = null;
+    // Which build the user picked, for a database published in more than
+    // one. The page's own, and sent with every database request: timon
+    // keeps no preference, because a choice only means something at the
+    // moment install is pressed (see routes._chosen).
+    let dbChoice = {};
+
+    function dbEl(id) { return document.getElementById(id); }
+
+    function dbRows(view) {
+        return [...((view && view.bundle) || []), ...((view && view.extra) || [])];
+    }
+
+    function dbApply(view) {
+        if (!view) return;
+        const previous = dbView;
+        dbView = view;
+        dbSettled(previous, view);
+        dbPaint();
+        dbSchedule();
+    }
+
+    // A download that has just ended, said once. The page is polling, so
+    // the finished state comes back on every pass until something else
+    // changes; comparing with what was on screen keeps it to one toast.
+    function dbSettled(previous, view) {
+        dbRows(view).forEach(db => {
+            const was  = dbRows(previous).find(d => d.key === db.key);
+            const from = was && was.download ? was.download.state : '';
+            const to   = db.download ? db.download.state : '';
+            if (!to || to === from) return;
+            if (to === 'done')           toast(`${db.label} installed`);
+            else if (to === 'failed')    toast(`${db.label}: ${db.download.error}`, 'err');
+            else if (to === 'cancelled') toast(`${db.label} download stopped`);
+        });
+    }
+
+    function dbPaint() {
+        const v = dbView;
+        const btn = dbEl('db-install-btn');
+        const busy = (v.bundle || []).some(db => db.download && db.download.running);
+        // Frozen once there is nothing left to install: a second press
+        // would have nothing to do, and the bundle is installed once.
+        btn.disabled = v.installed || busy || !v.can_install;
+        btn.textContent = v.installed ? 'installed' : busy ? 'installing…' : 'install databases';
+        btn.classList.toggle('db-installed', !!v.installed);
+
+        const step = dbEl('db-step');
+        step.classList.toggle('done', !!v.installed);
+        step.textContent = v.installed ? '✓' : '0';
+
+        const note = dbEl('db-note');
+        const holding = v.holding || [];
+        note.hidden = holding.length === 0;
+        if (holding.length) {
+            // Named and nothing more. The row beneath already says missing,
+            // the button already offers to fetch it, and the run button is
+            // already dark — a sentence explaining all three says nothing the
+            // card is not showing.
+            const list = holding.length > 1
+                ? holding.slice(0, -1).join(', ') + ' and ' + holding[holding.length - 1]
+                : holding[0];
+            dbEl('db-note-text').textContent = `${list} not found`;
+        }
+
+        dbEl('db-list').innerHTML = dbRows(v).map(dbRow).join('');
+        // Where they land is timon's business, not the user's: they are found
+        // by timon and asked for by no pipeline, so a path here is a fact
+        // nobody can act on. The row's "where" says it for a database that is
+        // missing, which is the one case where it matters.
+        const foot = dbEl('db-foot');
+        // Nothing left to say once everything is there.
+        foot.textContent = v.installed
+            ? ''
+            : 'A download keeps going only while timon is open.';
+        foot.hidden = !foot.textContent;
+    }
+
+    function dbRow(db) {
+        const chip = db.present ? '<span class="db-chip ok">installed</span>'
+                   : db.download && db.download.running ? '<span class="db-chip">downloading</span>'
+                   : '<span class="db-chip bad">missing</span>';
+        const size = db.size ? `<span class="db-size">${fbEscape(db.size)}</span>` : '';
+        // A database outside the bundle (GTDB-Tk) is fetched on its own,
+        // and only offered because this run reads it.
+        const own = dbView.bundle.some(d => d.key === db.key) ? '' :
+            `<button type="button" class="btn btn-primary db-row-btn"
+                     onclick="dbInstall('${db.key}')"
+                     ${db.can_install ? '' : 'disabled'}>install</button>`;
+        return `<div class="db-row" data-db="${fbEscape(db.key)}">
+                    <div class="db-row-head">
+                        <span class="db-name">${fbEscape(db.label)}</span>
+                        ${size}${chip}${own}
+                    </div>
+                    <!-- No path: where a database lives is timon's business.
+                         It is found by timon, named by no pipeline and asked
+                         for in no form, so the folder it sits in is a fact
+                         nobody here can act on. The one exception is a
+                         variable pointing somewhere wrong, which the refusal
+                         below says in full — that path is the user's own. -->
+                    ${dbBody(db)}
+                </div>`;
+    }
+
+    function dbBody(db) {
+        const d = db.download;
+        if (d && d.running) return dbProgress(db, d);
+        if (db.present) return '';
+        const about = db.description ? `<div class="db-hint">${fbEscape(db.description)}</div>` : '';
+        const why = db.reason
+            ? `<div class="db-hint">${fbEscape(db.reason)}. Or launch timon with <code>${fbEscape(db.env)}=&lt;path&gt;</code> to use a copy you already have.</div>`
+            : '';
+        return about + dbPick(db) + why;
+    }
+
+    // The builds one database is published in, for the user to choose
+    // between before anything is fetched. Drawn only where there is more
+    // than one, so every other row is exactly as it was.
+    function dbPick(db) {
+        const builds = db.variants || [];
+        if (builds.length < 2) return '';
+        const options = builds.map(v => {
+            const on = v.id === db.variant;
+            return `<label class="db-pick-opt${on ? ' on' : ''}">
+                        <input type="radio" name="pick-${fbEscape(db.key)}"
+                               value="${fbEscape(v.id)}" ${on ? 'checked' : ''}
+                               onchange="dbPicked('${db.key}', this.value)">
+                        <span class="db-pick-name">${fbEscape(v.label)}</span>
+                        <span class="db-pick-size">${fbEscape(v.size)}</span>
+                        <span class="db-pick-note">${fbEscape(v.note)}</span>
+                    </label>`;
+        }).join('');
+        return `<div class="db-pick" role="radiogroup"
+                     aria-label="which ${fbEscape(db.label)} to install">${options}</div>`;
+    }
+
+    // Nothing is fetched here — the choice only decides what install would
+    // do — but the card is asked again so the row's size and name follow it.
+    function dbPicked(key, id) {
+        dbChoice[key] = id;
+        dbLoad();
+    }
+
+    function dbProgress(db, d) {
+        // A server that sends no Content-Length gives nothing to draw a
+        // fraction from, so the bar says "going" rather than lying about
+        // how far along it is.
+        const bar = d.known
+            ? `<div class="db-bar"><span style="width:${d.percent}%"></span></div>`
+            : '<div class="db-bar unknown"><span></span></div>';
+        const detail = d.known ? `${d.progress} · ${d.percent}%` : d.progress;
+        return `<div class="db-progress">
+                    ${bar}
+                    <div class="db-progress-line">
+                        <span>${fbEscape(d.state)} · ${fbEscape(detail)}</span>
+                        <button type="button" class="btn" onclick="dbCancel('${db.key}')"
+                                ${d.state === 'downloading' ? '' : 'disabled'}>stop</button>
+                    </div>
+                </div>`;
+    }
+
+    function dbPost(url, key) {
+        const fd = new FormData();
+        if (key) fd.append('db', key);
+        Object.entries(dbChoice).forEach(([db, id]) => fd.append(`variant.${db}`, id));
+        return fetch(url, { method: 'POST', body: fd })
+            .then(r => r.json().then(data => ({ ok: r.ok, data })));
+    }
+
+    // The same choice on the way in, so what the card draws and what the
+    // install button would fetch are never two different builds.
+    function dbQuery() {
+        const params = new URLSearchParams();
+        Object.entries(dbChoice).forEach(([db, id]) => params.append(`variant.${db}`, id));
+        const query = params.toString();
+        return query ? `?${query}` : '';
+    }
+
+    // The answer to every database request carries whether the run can
+    // start, because a database arriving is what lets it.
+    function dbReceive(data) {
+        dbApply(data);
+        if ('can_start' in data) setRunReady(data.can_start);
+    }
+
+    // No key is the install button: the bundle. A key is one database
+    // outside it that this run reads.
+    function dbInstall(key) {
+        dbPost('/databases/install', key)
+            .then(({ ok, data }) => {
+                dbReceive(data);
+                if (!ok || !data.ok) { toast(data.error || 'could not start the install', 'err'); return; }
+                toast('install started');
+            })
+            .catch(() => toast('could not start the install', 'err'));
+    }
+
+    function dbCancel(key) {
+        dbPost('/databases/cancel', key)
+            .then(({ data }) => dbReceive(data))
+            .catch(() => toast('could not stop the download', 'err'));
+    }
+
+    function dbLoad() {
+        fetch('/databases' + dbQuery())
+            .then(r => r.json())
+            .then(dbReceive)
+            .catch(() => { /* the next tick asks again */ });
+    }
+
+    // Asked for only while something is arriving: the card has to notice
+    // that it finished, and the run button with it.
+    function dbSchedule() {
+        if (dbTimer) { clearTimeout(dbTimer); dbTimer = null; }
+        if (dbView.busy) dbTimer = setTimeout(dbLoad, 1000);
+    }
+
+    // The first paint already carries the answer, so the card is right
+    // before anything has been asked of the server.
+    dbApply(dbView);
+
+    // ── 4. Run, stop, and watching one that is already going ────
+    // A run is a process on the machine, not something this page holds
+    // open: nextflow is launched in a session of its own and writes its
+    // output to a file, so it survives the browser being closed and timon
+    // itself being quit. The page therefore never keeps track of a run. It
+    // is *told* what is running — one message, run_state, which arrives on
+    // connect, when a run starts, when one ends, and in the first paint of
+    // the page — and it watches whatever that message names.
+    //
+    // That is the whole of how a run is recovered: closing the browser
+    // mid-run and opening it again, or quitting timon and starting a new
+    // one, lands on the same console with the same output, because neither
+    // the run nor its output ever depended on the page.
+
+    let watching = '';    // the run this page has asked to be sent
+    let consoleOf = '';   // the run whose output the console is holding
+
     // The run button's label is split into icon/text spans so narrow
     // viewports can hide just the text (see .btn-label at ≤480px) without
     // losing the accessible name — textContent alone couldn't do that.
@@ -1003,91 +1983,608 @@
         btn.setAttribute('aria-label', ariaLabel);
     }
 
-    function lockApp() {
+    const TONE_COLOR = { ok: 'var(--color-green)', bad: 'var(--color-red)',
+                         warn: 'var(--color-amber)', busy: 'var(--color-amber)' };
+
+    function termState(text, color) {
+        const el = document.getElementById('term-state');
+        el.textContent = text;
+        el.style.color = color || '';
+    }
+
+    function lockApp(run) {
         setWheelRunning(true);
+        termEl().classList.add('running');
         document.querySelector('.shell').classList.add('app-locked');
         document.getElementById('cancel-btn').style.display = 'inline-flex';
-        document.getElementById('run-btn').classList.add('running');
+        const btn = document.getElementById('run-btn');
+        btn.classList.add('running');
+        btn.disabled = true;
         setRunBtnState('⟳', 'running', 'Workflow running');
-        document.getElementById('run-btn').disabled = true;
-        document.getElementById('term-state').textContent = '● running';
-        document.getElementById('term-state').style.color = 'var(--color-amber)';
+        termState(run && !run.mine ? '● running · started elsewhere' : '● running',
+                  'var(--color-amber)');
     }
 
-    function unlockApp(state) {
+    function unlockApp(ended) {
         setWheelRunning(false);
+        termEl().classList.remove('running');
         document.querySelector('.shell').classList.remove('app-locked');
         document.getElementById('cancel-btn').style.display = 'none';
-        const btn = document.getElementById('run-btn');
-        btn.classList.remove('running');
-        btn.disabled = false;
-        if (state === 'done') {
-            setRunBtnState('▶', 'run again', 'Run analysis again');
-            document.getElementById('term-state').textContent = '✓ complete';
-            document.getElementById('term-state').style.color = 'var(--color-green)';
-        } else {
-            setRunBtnState('▶', 'run analysis', 'Run analysis');
-            document.getElementById('term-state').textContent = '✗ stopped';
-            document.getElementById('term-state').style.color = 'var(--color-red)';
-        }
+        document.getElementById('run-btn').classList.remove('running');
+        if (!ended) { setRunBtnState('▶', 'run analysis', 'Run analysis'); return; }
+        setRunBtnState('▶', 'run again', 'Run analysis again');
+        termLine(`── ${ended.id} ${ended.status.label} ──`,
+                 ended.status.tone === 'ok' ? 't-green' : 't-red');
+        termState(`${ended.status.glyph} ${ended.status.label}`,
+                  TONE_COLOR[ended.status.tone]);
     }
 
-    document.getElementById('run-btn').addEventListener('click', function() {
-        document.getElementById('terminal').innerHTML =
-            '<span class="t-dim">── launching nextflow ───────────────────────────────────</span><br>';
-        lockApp();
-        socket.emit('run_workflow');
+    // The one place the page reacts to what is running. Everything it can
+    // be told arrives here, so a page that has just connected and a page
+    // that has been open all along end up in the same state.
+    function applyRunState(state) {
+        if (!state) return;
+        const run = state.run;
+        if (state.running && run) {
+            if (watching !== run.id) {
+                // Something is going that this page is not being sent. Ask
+                // for it: the server replies with the run's log from a
+                // little way back, so the console fills in rather than
+                // starting from whatever happens to be written next.
+                watching = run.id;
+                termClear();
+                termLine(run.mine
+                    ? `── ${run.id} ──`
+                    : `── ${run.id} — running since ${run.since}, started in `
+                      + `${run.launch_dir} ──`, 't-dim');
+                socket.emit('attach', { exp_id: run.id });
+            }
+            consoleOf = run.id;
+            lockApp(run);
+        } else {
+            watching = '';
+            unlockApp(state.ended);
+            setRunReady(!!state.can_start);
+            setCanTest(!!state.can_test);
+        }
+        // A run that has just ended has finished writing, and one that has
+        // just started has begun: either way what these two views are
+        // showing is now out of date.
+        if (!document.getElementById('view-runs').hidden) runsLoad();
+        if (!state.running && !document.getElementById('view-results').hidden) rsLoad(rs.rel);
+    }
+
+    socket.on('run_state', applyRunState);
+    socket.on('workflow_output', function(msg) { termFeed(msg.data); });
+
+    // A run that is over, sent whole when nothing is going: for a reopened
+    // run, the failure it ended on. Skipped when the console already holds
+    // that run — a reconnect must not scroll the user back to the top of
+    // output they were reading.
+    socket.on('replay', function(msg) {
+        if (watching || consoleOf === msg.id) return;
+        consoleOf = msg.id;
+        termClear();
+        termLine(`── ${msg.id} · ${msg.status.label} ${msg.since} — its last output ──`, 't-dim');
+        termFeed(msg.data);
+        unlockApp({ id: msg.id, status: msg.status });
     });
 
-    function cancelRun() {
+    // Asked on every connection, including the reconnections socket.io
+    // makes on its own after a laptop wakes up: what is running is the
+    // server's answer, never something this page remembers across one.
+    socket.on('connect', function() { socket.emit('attach', {}); });
+
+    // Named rather than inline: the quick test below launches the same way,
+    // so the two share one lock, one console and one stop button.
+    function startRun() {
+        termClear();
+        termLine('── launching nextflow ──', 't-dim');
+        lockApp(null);
+        socket.emit('run_workflow');
+    }
+
+    document.getElementById('run-btn').addEventListener('click', startRun);
+
+    // ── The pipeline's own test ─────────────────────────────────
+    // A pipeline that ships a test profile can be run with no configuration
+    // at all: the profile names its own reads and its own databases. That is
+    // what makes it worth a button of its own — it answers whether this
+    // install works before there is a run to blame. Which pipelines have one
+    // is the server's answer (run.can_test), and it comes back with every
+    // reply that can change the pipeline.
+    function setCanTest(can) {
+        document.getElementById('test-btn').style.display = can ? 'inline-flex' : 'none';
+    }
+
+    function startTest() {
         const confirmed = confirm(
-            'Stop the running workflow?\n\nNextflow will be killed immediately. ' +
+            'Run this pipeline\'s own test?\n\n' +
+            'Nextflow fetches the test data, the databases the test profile names ' +
+            'and the container images — a few hundred megabytes the first time. ' +
+            'The configuration below is not used, and the outputs go to a folder ' +
+            'of their own.'
+        );
+        if (!confirmed) return;
+        termClear();
+        termLine('── launching the pipeline test ──', 't-dim');
+        lockApp(null);
+        socket.emit('run_test');
+    }
+
+    // Stopping is not instant and is not undoable: nextflow is asked to
+    // stop, and given time to take its tasks and their containers down with
+    // it. The page stays locked until the server says the run is over.
+    function cancelRun(expId) {
+        const which = expId || watching;
+        const confirmed = confirm(
+            `Stop ${which || 'the running workflow'}?\n\n` +
+            'Nextflow is asked to shut down and to stop the tasks it started. ' +
             'Partial outputs may be incomplete. This cannot be undone.'
         );
         if (!confirmed) return;
-        socket.emit('cancel_workflow');
+        socket.emit('cancel_workflow', { exp_id: which });
     }
 
-    socket.on('workflow_output', function(msg) {
-        const t = document.getElementById('terminal');
-        const line = msg.data
-            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-            .replace(/\[ERROR\]/g,   '<span class="t-red">[ERROR]</span>')
-            .replace(/\[WARN\]/g,    '<span class="t-amber">[WARN]</span>')
-            .replace(/\[.*?DONE.*?\]/gi, match => `<span class="t-green">${match}</span>`)
-            .replace(/(N E X T F L O W)/g, '<span class="t-blue">$1</span>');
-        t.innerHTML += line;
-        t.scrollTop = t.scrollHeight;
-    });
+    // ── Views ───────────────────────────────────────────────────
+    // The sidebar switches between configuring a run and reading what one
+    // wrote. Both stay in the DOM: the console goes on printing behind the
+    // results browser, and coming back finds the form as it was left.
+    const VIEWS = {
+        config:  { title: 'Configuration' },
+        runs:    { title: 'Previous runs' },
+        results: { title: 'Results' },
+    };
 
-    socket.on('finish', function() {
-        unlockApp('done');
-        termLine('<span class="t-green">── pipeline finished ────────────────────────────────────</span>');
-    });
+    function showView(name) {
+        // In the address bar, so a reload comes back to the view the user was
+        // in — a long run is watched over several visits to this page.
+        history.replaceState(null, '', name === 'config' ? location.pathname : '#' + name);
+        Object.keys(VIEWS).forEach(key =>
+            document.getElementById('view-' + key).hidden = key !== name);
+        document.querySelectorAll('.nav-item[data-view]').forEach(el =>
+            el.classList.toggle('active', el.dataset.view === name));
+        document.getElementById('view-title').textContent = VIEWS[name].title;
+        // Both lists are re-read on every visit rather than once: a run
+        // writes into that folder while it is being looked at, and another
+        // one may have ended since, so anything kept would be out of date.
+        if (name === 'results') rsLoad(rs.rel);
+        if (name === 'runs') runsLoad();
+    }
 
-    socket.on('workflow_cancelled', function() {
-        unlockApp('cancelled');
-        termLine('<span class="t-red">── workflow stopped by user ─────────────────────────────</span>');
-    });
+    document.querySelectorAll('.nav-item[data-view]').forEach(el =>
+        el.addEventListener('click', ev => { ev.preventDefault(); showView(el.dataset.view); }));
+    document.getElementById('results-jump')
+            .addEventListener('click', () => showView('results'));
 
-    // ── Reset ────────────────────────────────────────────────────
-    function resetAll() {
-        if (!confirm('Reset all configuration and samples?')) return;
-        fetch('/reset_all')
+    // ── Runs ────────────────────────────────────────────────────
+    // What the workspace remembers, and what is going right now. Every
+    // fact in a row is decided by the server (presenters.run_row,
+    // presenters.live_view) — how long ago, what to call the way it ended,
+    // whether nextflow could still continue it, whether it is still going
+    // — so this only prints what it is given.
+    //
+    // A row that is still running is offered different things to do: it
+    // cannot be reopened, because it has not finished being written, but
+    // it can be watched. That is true of a run this timon started and of
+    // one it merely found. Stopping is not offered here: a running run
+    // locks the page, and the one control left live for it is the topbar's
+    // stop, which acts on the run being watched.
+    const pastRuns = { rows: [], elsewhere: [] };
+
+    function runsLoad() {
+        fetch('/runs')
             .then(r => r.json())
-            .then(data => { if (data.ok) location.reload(); });
+            .then(data => {
+                if (!data.ok) { toast('could not read past runs', 'err'); return; }
+                pastRuns.rows = data.runs;
+                pastRuns.elsewhere = data.elsewhere || [];
+                runsRender();
+            })
+            .catch(() => toast('could not read past runs', 'err'));
     }
+
+    // Watching is the same act wherever the run came from: ask for it by
+    // name, and let the state that comes back drive the console.
+    function watchRun(id) {
+        watching = id;
+        termClear();
+        termLine(`── attaching to ${id} ──`, 't-dim');
+        socket.emit('attach', { exp_id: id });
+        showView('config');
+        document.getElementById('terminal').scrollIntoView({ behavior: 'smooth',
+                                                             block: 'center' });
+    }
+
+    function runActions(r) {
+        if (r.running) {
+            return `<button type="button" class="btn" data-watch="${fbEscape(r.id)}"
+                            title="show this run's output in the console">watch</button>`;
+        }
+        return `<button type="button" class="btn" data-open="${r.i}"
+                        title="${r.resumable ? 'reopen exactly as it ran — running it again continues the run'
+                                             : 'reopen exactly as it ran — running it again starts it over'}">reopen</button>`;
+    }
+
+    function bindRunActions(list) {
+        list.querySelectorAll('[data-watch]').forEach(btn =>
+            btn.addEventListener('click', () => watchRun(btn.dataset.watch)));
+    }
+
+    function runsRender() {
+        const list = document.getElementById('runs-list');
+        const rows = pastRuns.rows;
+        document.getElementById('runs-sub').textContent =
+            rows.length ? `${rows.length} run${rows.length === 1 ? '' : 's'}` : '';
+        if (!rows.length) {
+            list.innerHTML = '<div class="fb-empty">no runs yet</div>';
+        } else {
+            list.innerHTML = rows.map((r, i) => `
+            <div class="run-row ${r.current ? 'current' : ''}">
+                <span class="fb-ico ${r.status.tone}">${r.status.glyph}</span>
+                <span class="run-id">${fbEscape(r.id)}</span>
+                <span class="run-state ${r.status.tone}">${r.status.label}</span>
+                <span class="run-pipe">${fbEscape(r.pipeline)}</span>
+                <span class="fb-meta run-samples">${r.n_samples} sample${r.n_samples === 1 ? '' : 's'}${r.duration ? ' · ' + r.duration : ''}</span>
+                <span class="fb-meta run-when" title="${fbEscape(r.when)}">${fbEscape(r.since)}</span>
+                <span class="run-actions">
+                    ${runActions({ ...r, i })}
+                    <button type="button" class="btn" data-results="${i}">results</button>
+                </span>
+            </div>`).join('');
+            list.querySelectorAll('[data-open]').forEach(btn =>
+                btn.addEventListener('click', () => reopenRun(rows[btn.dataset.open])));
+            list.querySelectorAll('[data-results]').forEach(btn =>
+                btn.addEventListener('click', () => {
+                    // Straight into that run's own folder rather than the top of
+                    // the output folder: the row was the question.
+                    rs.rel = rows[btn.dataset.results].rel;
+                    showView('results');
+                }));
+            bindRunActions(list);
+        }
+        runsElsewhereRender();
+    }
+
+    // Runs going in another folder on this machine. No results button: the
+    // results browser is rooted at the workspace this timon was launched
+    // in, and that folder is not in it.
+    function runsElsewhereRender() {
+        const rows = pastRuns.elsewhere;
+        document.getElementById('runs-elsewhere-card').hidden = !rows.length;
+        if (!rows.length) return;
+        const list = document.getElementById('runs-elsewhere');
+        list.innerHTML = rows.map(r => `
+            <div class="run-row">
+                <span class="fb-ico busy">⟳</span>
+                <span class="run-id">${fbEscape(r.id)}</span>
+                <span class="run-state busy">running</span>
+                <span class="run-pipe">${r.test ? 'quick test' : ''}</span>
+                <span class="fb-meta run-samples" title="${fbEscape(r.workspace)}">${fbEscape(r.launch_dir)}</span>
+                <span class="fb-meta run-when" title="${fbEscape(r.when)}">${fbEscape(r.since)}</span>
+                <span class="run-actions">
+                    <button type="button" class="btn" data-watch="${fbEscape(r.id)}"
+                            title="show this run's output in the console">watch</button>
+                </span>
+            </div>`).join('');
+        bindRunActions(list);
+    }
+
+    document.getElementById('runs-refresh').addEventListener('click', runsLoad);
+
+    // Reopening puts the recorded run back exactly as it ran and pins it
+    // there, so what comes back is rebuilt the way a pipeline switch is and
+    // then locked. Nothing is re-judged: a run that failed because the world
+    // moved is run again to fail the same way, and says so in the console.
+    function reopenRun(row) {
+        const fd = new FormData();
+        fd.append('exp_id', row.id);
+        fetch('/runs/open', { method: 'POST', body: fd })
+            .then(r => r.json().then(data => ({ ok: r.ok, data })))
+            .then(({ ok, data }) => {
+                if (!ok || !data.ok) {
+                    toast(data.error || 'could not reopen that run', 'err');
+                    return;
+                }
+                applyReopened(data);
+                showView('config');
+                // Asking what is going with nothing named is what brings the
+                // reopened run's own output back into the console.
+                socket.emit('attach', {});
+                toast(`${row.id} reopened as it ran`);
+            })
+            .catch(() => toast('could not reopen that run', 'err'));
+    }
+
+    // A reopened run is pinned: the workflow, the form and the sheet stay as
+    // they ran until the user says otherwise. Whether it is pinned is the
+    // server's answer (run.pinned); the page only locks what it is told to.
+    function applyPinned(pinned, restart) {
+        document.getElementById('pinned-note').hidden = !pinned;
+        document.querySelector('.pipe-list').classList.toggle('locked', !!pinned);
+        if (!pinned) return;
+        if (restart && restart.previous) {
+            document.getElementById('pinned-text').textContent =
+                `${restart.id} (${restart.status.label} ${restart.since}) is reopened ` +
+                'exactly as it ran — running again repeats it.';
+        }
+        lockForm('config-form', 'config-edit-btn', 'step2-num');
+        lockSampleSheet();
+        document.getElementById('config-edit-btn').style.display = 'none';
+        document.getElementById('sample-edit-btn').style.display = 'none';
+    }
+
+    function unpinRun() {
+        fetch('/runs/unpin', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.ok) { toast('could not unlock the run', 'err'); return; }
+                applyPinned(false);
+                // No longer held at the revision it ran at, so it launches at
+                // today's pin — and the status strip has to say so.
+                document.getElementById('pipe-rev').textContent = data.revision || '';
+                // Back to an ordinary saved configuration: each part is
+                // locked with its own edit button, as after a save.
+                if (data.configured) lockForm('config-form', 'config-edit-btn', 'step2-num');
+                if (data.sheet_saved) lockSampleSheet();
+                setRunReady(data.can_start);
+                toast(`${data.id} unlocked — running it no longer repeats it exactly`);
+            })
+            .catch(() => toast('could not unlock the run', 'err'));
+    }
+
+    function applyReopened(data) {
+        document.querySelectorAll('.pipeline-card').forEach(c => c.classList.remove('selected'));
+        const card = document.querySelector(`.pipeline-card[data-pipe-id="${data.pipeline_id}"]`);
+        if (card) card.classList.add('selected');
+        document.getElementById('pipe-label').textContent = data.pipeline_id;
+        document.getElementById('pipe-rev').textContent = data.revision || '';
+        document.getElementById('pipe-dot').classList.add('active');
+        setCanTest(data.can_test);
+
+        activeCols = data.columns;
+        activePathCols = data.path_columns;
+        setParams(data.params_html);
+        rebuildTable(data.columns, data.samples);
+        document.getElementById('exp-id').value = data.id;
+        document.getElementById('stat-runid').textContent = data.id || '—';
+        clearErrors('config-error-list', 'config-errors');
+        clearErrors('sample-error-list', 'sample-errors');
+
+        // A sheet is locked when one was actually written. Rows on the page
+        // are not that: a reopened run whose reads have moved has its rows
+        // back precisely so they can be corrected.
+        if (data.sheet_saved) { lockSampleSheet(); setValidatedCount(data.n_samples); }
+        else unlockSampleSheet();
+        if (data.configured) lockForm('config-form', 'config-edit-btn', 'step2-num');
+        else unlockForm('config-form', 'config-edit-btn', 'step2-num');
+        applyRestart(data.restart);
+        applyPinned(data.pinned, data.restart);
+        dbApply(data.databases);
+        setRunReady(data.can_start);
+        syncParams();
+    }
+
+    // ── Continuing a run ────────────────────────────────────────
+    // Whether this identifier already names a run, and whether nextflow
+    // still holds what it would take to continue it, are the server's
+    // answers; they arrive with every reply that can change either.
+    function applyRestart(restart) {
+        const note = document.getElementById('restart-note');
+        const wrap = document.getElementById('restart-resume-wrap');
+        const box  = document.getElementById('resume');
+        if (!restart || !restart.previous) {
+            note.hidden = true;
+            wrap.hidden = true;
+            // Back to the default, so turning it off for one run does not
+            // quietly follow the user to the next.
+            box.checked = true;
+            return;
+        }
+        const what = `${restart.id} — ${restart.status.label} ${restart.since}`;
+        document.getElementById('restart-text').textContent = restart.can_resume
+            ? `${what}. Running continues it into the same folder.`
+            : `${what}. Running starts it over in the same folder.`;
+        wrap.hidden = !restart.can_resume;
+        box.checked = restart.can_resume ? restart.on : true;
+        note.hidden = false;
+    }
+
+    // ── Results browser ─────────────────────────────────────────
+    // Same shape as the file browser above, and deliberately less: there is
+    // nothing to select and nowhere outside the output folder to go, so a
+    // row is either a folder to walk into or a file to open.
+    const rs = { dir: null, rel: '' };
+    const rsEl = id => document.getElementById(id);
+
+    // Path-in-the-URL, not a query string: a report that pulls in a
+    // stylesheet beside it resolves that against its own address, and only
+    // this shape puts it back in the folder it came from.
+    function rawUrl(rel, download) {
+        const url = '/results/raw/' + rel.split('/').map(encodeURIComponent).join('/');
+        return download ? url + '?download=1' : url;
+    }
+
+    function rsLoad(rel = '') {
+        fetch('/results/browse?path=' + encodeURIComponent(rel))
+            .then(r => r.json())
+            .then(data => {
+                if (!data.ok) {
+                    toast(data.error || 'cannot open that folder', 'err');
+                    // A folder that went away under us — nextflow cleaning
+                    // up, or a run reset — is not a dead end: fall back to
+                    // the top of the output folder.
+                    if (rel) rsLoad('');
+                    return;
+                }
+                rs.dir = data;
+                rs.rel = data.rel;
+                rsRender();
+            })
+            .catch(() => toast('cannot read the output folder', 'err'));
+    }
+
+    function rsRender() {
+        const d = rs.dir;
+        // Bracketed with left-to-right marks: the head shows a path
+        // right-aligned so that cutting it takes the top off rather than the
+        // folder you are in, and without these the leading slash is read as
+        // part of the surrounding right-to-left run and jumps to the far end.
+        // The path within the output folder, never the absolute one: where
+        // that folder sits is timon's arrangement, and the crumbs already
+        // name the part of it the user chose.
+        rsEl('rs-path').textContent = d.rel ? '\u200e' + d.rel + '\u200e' : '';
+        rsEl('rs-path').title = d.rel;
+        rsEl('rs-up').disabled = d.at_root;
+
+        const crumbs = d.crumbs.length > 5
+            ? [d.crumbs[0], { name: '…', rel: d.crumbs[d.crumbs.length - 4].rel },
+               ...d.crumbs.slice(-3)]
+            : d.crumbs;
+        rsEl('rs-crumbs').innerHTML = crumbs.map(c =>
+            `<button type="button" class="fb-crumb${c.root ? ' root' : ''}" ` +
+            `data-rel="${fbEscape(c.rel)}">${fbEscape(c.name)}</button>`
+        ).join('<span class="fb-sep">/</span>');
+        rsEl('rs-crumbs').querySelectorAll('.fb-crumb').forEach(b =>
+            b.addEventListener('click', () => rsLoad(b.dataset.rel)));
+
+        if (!d.entries.length) {
+            rsEl('rs-list').innerHTML = `<div class="fb-empty">${
+                d.exists ? 'this folder is empty' : 'no results yet'
+            }</div>`;
+            return;
+        }
+
+        rsEl('rs-list').innerHTML = d.entries.map((e, i) => `
+            <div class="fb-row ${e.dir ? 'dir' : 'file'}" data-i="${i}">
+                <span class="fb-ico">${e.glyph}</span>
+                <span class="fb-name">${fbEscape(e.name)}</span>
+                ${e.current ? '<span class="rs-tag">this run</span>' : ''}
+                <span class="fb-meta">${e.size_label}</span>
+                <span class="fb-meta rs-when">${e.when}</span>
+                ${e.dir ? '' : `<a class="rs-dl" href="${rawUrl(e.rel, true)}" download
+                                   title="download ${fbEscape(e.name)}"
+                                   aria-label="download ${fbEscape(e.name)}">↓</a>`}
+            </div>`).join('') + (d.truncated
+            ? `<div class="fb-empty">${d.truncated} more not shown — this folder is very large</div>`
+            : '');
+
+        rsEl('rs-list').querySelectorAll('.fb-row').forEach(row => {
+            const entry = d.entries[row.dataset.i];
+            row.addEventListener('click', () => {
+                if (entry.dir) rsLoad(entry.rel);
+                // A file timon cannot draw is still a file the user wants:
+                // the row hands it to the download beside it.
+                else if (entry.openable) rvOpen(entry);
+                else row.querySelector('.rs-dl').click();
+            });
+        });
+        // The arrow saves the file; the row it sits on opens it.
+        rsEl('rs-list').querySelectorAll('.rs-dl').forEach(a =>
+            a.addEventListener('click', ev => ev.stopPropagation()));
+    }
+
+    rsEl('rs-up').addEventListener('click', () => {
+        if (rs.dir && rs.dir.parent !== null) rsLoad(rs.dir.parent);
+    });
+    rsEl('rs-refresh').addEventListener('click', () => rsLoad(rs.rel));
+
+    // ── Result viewer ───────────────────────────────────────────
+    function rvClose() {
+        rsEl('rv-overlay').hidden = true;
+        // Emptied on the way out: a report left in the frame would keep
+        // running, and a 300 MB matrix would stay in memory for the session.
+        rsEl('rv-body').innerHTML = '';
+        document.body.classList.remove('modal-open');
+    }
+
+    function rvOpen(entry) {
+        rsEl('rv-title').textContent = entry.name;
+        rsEl('rv-sub').textContent   = '';
+        rsEl('rv-note').textContent  = '';
+        rsEl('rv-body').innerHTML    = '<div class="fb-empty">opening…</div>';
+        rsEl('rv-tab').href          = rawUrl(entry.rel);
+        rsEl('rv-download').href     = rawUrl(entry.rel, true);
+        rsEl('rv-overlay').hidden    = false;
+        document.body.classList.add('modal-open');
+
+        fetch('/results/view?path=' + encodeURIComponent(entry.rel))
+            .then(r => r.json())
+            .then(data => {
+                if (!data.ok) { rvClose(); toast(data.error || 'cannot open that file', 'err'); return; }
+                rsEl('rv-sub').textContent  = `${data.size_label} · ${data.when}`;
+                rsEl('rv-note').textContent = rvNote(data);
+                rsEl('rv-body').innerHTML   = rvContent(data, entry.rel);
+            })
+            .catch(() => { rvClose(); toast('cannot open that file', 'err'); });
+    }
+
+    // What was left out, said plainly. A preview that quietly showed the top
+    // of a matrix as if it were all of it would be worse than none.
+    function rvNote(d) {
+        const parts = [];
+        if (d.long)           parts.push(`first ${d.rows.length} rows`);
+        else if (d.truncated) parts.push('first part of the file');
+        if (d.wide)           parts.push(`first ${(d.rows[0] || []).length} of ${d.columns} columns`);
+        return parts.length ? 'showing the ' + parts.join(', ') + ' — download for the whole file' : '';
+    }
+
+    function rvContent(d, rel) {
+        const src  = rawUrl(rel);
+        const name = fbEscape(d.name);
+        if (d.kind === 'image')
+            return `<img class="rv-img" src="${src}" alt="${name}">`;
+        // No allow-same-origin: the report gets an origin of its own, so its
+        // scripts can draw its plots and can touch nothing of timon's.
+        if (d.kind === 'html')
+            return `<iframe class="rv-frame" src="${src}" title="${name}"
+                            sandbox="allow-scripts allow-popups allow-downloads allow-forms"></iframe>`;
+        if (d.kind === 'pdf')
+            return `<iframe class="rv-frame" src="${src}" title="${name}"></iframe>`;
+        if (d.kind === 'table')  return rvTable(d);
+        if (d.kind === 'text')   return `<pre class="rv-text">${fbEscape(d.text)}</pre>`;
+        return `<div class="fb-empty">timon cannot show this kind of file — download it to open it</div>`;
+    }
+
+    function rvTable(d) {
+        const [head, ...body] = d.rows;
+        const cells = (row, tag) => row.map(c => `<${tag}>${fbEscape(c)}</${tag}>`).join('');
+        return `<div class="rv-table-wrap"><table class="rv-table">
+                    <thead><tr>${cells(head || [], 'th')}</tr></thead>
+                    <tbody>${body.map(r => `<tr>${cells(r, 'td')}</tr>`).join('')}</tbody>
+                </table></div>`;
+    }
+
+    rsEl('rv-close').addEventListener('click', rvClose);
+    rsEl('rv-overlay').addEventListener('click', e => {
+        if (e.target === rsEl('rv-overlay')) rvClose();
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && !rsEl('rv-overlay').hidden) rvClose();
+    });
 
     // ── Restore locked state on page load if already configured ──
     (function restoreState() {
         syncParams();
+        // Rendered by the server like everything else about the run: the page
+        // is told whether this identifier already names a run, never asked to
+        // work it out.
+        applyRestart({{ run.restart | tojson }});
+        // What is running, in the first paint rather than only once the
+        // socket connects. A page loaded onto a run already in progress is
+        // locked before it has a chance to offer to start the same pipeline
+        // a second time.
+        applyRunState({{ run.live | tojson }});
+        if (location.hash === '#results') showView('results');
+        if (location.hash === '#runs') showView('runs');
         {% if run.configured %}
             lockForm('config-form', 'config-edit-btn', 'step2-num');
         {% endif %}
-        {% if run.n_samples > 0 %}
+        {% if run.sheet_saved %}
             lockSampleSheet();
             setValidatedCount({{ run.n_samples }});
         {% endif %}
+        applyPinned({{ run.pinned | tojson }}, {{ run.restart | tojson }});
     })();
 </script>
 </body>

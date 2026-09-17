@@ -6,9 +6,15 @@ by timon itself (``--input``, ``--outdir``) or are tuning knobs that would only
 crowd the form. What is listed here is what a user is expected to set for a
 run; anything left out keeps the pipeline's own default.
 
-The databases under ``requires_db`` are the exception: they are not declared
-per pipeline but described once in ``config.ENV_DATABASES``, because an
-environment variable names the same database for every pipeline that reads it.
+The databases a pipeline reads are not here at all: timon finds them
+(``timon.paths.REFERENCE_DATA``), so there is nothing to put in a form. They
+still come into one question this module answers, which is whether a run
+reaches the step that reads them.
+
+A select may declare ``options_from`` instead of an ``enum``: its options
+are what an installed database was built with (``timon.paths.DATABASE_OPTIONS``).
+They are read off the disk by the caller and handed in, so this module still
+only normalises.
 
 This module normalises those declarations, works out which of them the run as
 configured still uses, and casts submitted values to the declared type. It
@@ -20,12 +26,12 @@ rendered, on a machine with no connectivity.
 
 from __future__ import annotations
 
+import math
+import re
 from typing import Any
 
-from ..config import DB_GROUP, ENV_DATABASES
 
-
-def _normalise(p: dict) -> dict:
+def _normalise(p: dict, options: dict[str, list[str] | None] | None = None) -> dict:
     """One declaration filled out to the shape the rest of the app speaks."""
     field = {
         "label": p["id"],           # the id *is* the --flag; a label is optional
@@ -48,50 +54,61 @@ def _normalise(p: dict) -> dict:
     # tells coerce() to cast with float() rather than int().
     if field["type"] == "number":
         field.setdefault("step", 1)
+        # Every parameter in the form is a count, a length, a threshold or a
+        # fraction, and a negative one is never a run anybody meant. A
+        # declaration that forgot its floor gets this one rather than none.
+        field.setdefault("min", 0)
     if field["type"] == "select":
+        if field.get("options_from"):
+            _read_options(field, (options or {}).get(field["options_from"]))
         field["enum"] = [str(v) for v in field.get("enum", [])]
     return field
 
 
-def fields(pipe: dict) -> list[dict]:
-    """Every parameter this pipeline puts in the form, in declaration order."""
-    # A database listed under requires_db is passed from the environment (see
-    # nextflow.DB_FLAGS). Asking for it here as well would let the two disagree.
-    supplied = set(pipe.get("requires_db") or [])
-    return [_normalise(p) for p in pipe.get("params", []) if p["id"] not in supplied]
+def _read_options(field: dict, found: list[str] | None) -> None:
+    """Fill a select from what its database turned out to hold.
 
-
-def db_fields(pipe: dict, db_values: dict | None = None) -> list[dict]:
-    """The pipeline's ``requires_db`` databases, as fields of the form.
-
-    Their value is held on the experiment rather than among the parameters
-    (nextflow.DB_FLAGS turns it into the flag), so it is passed in here as the
-    field's default: whatever the environment set at launch, or the path a
-    previous save put there.
+    ``found`` is None while the database cannot be looked into — not yet
+    installed, say — and then the declared default is the one option: the
+    configuration can still be saved, and the run waits for the install
+    anyway. An index that was looked into offers only what is in it, so the
+    default moves to the nearest length there when the pipeline's own is
+    not; and one holding none offers nothing, which validation refuses.
     """
-    values = db_values or {}
-    optional_when = pipe.get("db_optional_when", {})
-    out = []
-    for key in pipe.get("requires_db", []):
-        meta = dict(ENV_DATABASES.get(key, {"label": key, "env": key.upper()}))
-        env = meta.pop("env")
-        out.append(_normalise({
-            "id": key,
-            "type": "text",
-            "group": pipe.get("db_group", DB_GROUP),
-            "default": values.get(key, ""),
-            # Required whenever it is asked for at all: a database only some
-            # steps read leaves the form entirely once those steps are skipped,
-            # so a field still standing is one the run is going to read.
-            "required": True,
-            # ``db_optional_when`` says which flags excuse it; spelled as an
-            # active_when so one evaluator settles it, and so the page can drop
-            # the field the moment the box is ticked.
-            "active_when": {flag: [False] for flag in optional_when.get(key, [])},
-            "placeholder": f"path, or launch with {env}=…",
-            **meta,
-        }))
-    return out
+    field["options_known"] = found is not None
+    if found is None:
+        field["enum"] = [field["default"]]
+        return
+    field["enum"] = found
+    if found and str(field["default"]) not in found:
+        target = parse_number(field["default"]) or 0
+        field["default"] = min(found, key=lambda v: (abs(float(v) - target), -float(v)))
+
+
+def fields(pipe: dict, options: dict[str, list[str] | None] | None = None) -> list[dict]:
+    """Every parameter this pipeline puts in the form, in declaration order.
+
+    ``options`` is what the databases on this machine hold, keyed as
+    ``options_from`` names it (``Experiment.fields`` reads them). Left out,
+    a select filled from a database offers its declared default alone —
+    enough for the questions that do not depend on what is installed.
+    """
+    # A database is found by timon (see "reference_data"), never typed in.
+    # Asking for it here as well would let the two disagree.
+    supplied = set(pipe.get("reference_data") or [])
+    return [_normalise(p, options)
+            for p in pipe.get("params", []) if p["id"] not in supplied]
+
+
+def database_conditions(pipe: dict) -> dict[str, dict]:
+    """When each database the pipeline reads is read, as ``active_when``.
+
+    ``db_optional_when`` names the flags that excuse one; spelled as an
+    active_when so the one evaluator below settles databases and parameters
+    alike, chaining included.
+    """
+    return {key: {flag: [False] for flag in flags}
+            for key, flags in (pipe.get("db_optional_when") or {}).items()}
 
 
 def required_trigger(p: dict, values: dict) -> tuple[str, Any] | None:
@@ -142,11 +159,12 @@ def inactive_ids(pipe: dict, values: dict | None = None) -> set[str]:
 
     A parameter can hang off one that has itself dropped out (`skip Nanoplot`
     under `skip QC`), so this is settled rather than evaluated once. A
-    ``requires_db`` database is in the same position, and db_fields() gives it
-    the equivalent condition.
+    database the pipeline reads is in the same position, and
+    database_conditions() gives it the equivalent condition.
     """
     conditions = {p["id"]: p["active_when"]
-                  for p in fields(pipe) + db_fields(pipe) if p.get("active_when")}
+                  for p in fields(pipe) if p.get("active_when")}
+    conditions.update(database_conditions(pipe))
     resolved = _current_values(pipe, values)
     out: set[str] = set()
     while True:
@@ -164,11 +182,45 @@ def is_customised(p: dict, values: dict) -> bool:
         return False
     current, default = values[p["id"]], p.get("default")
     if p["type"] == "number":
+        # A number the pipeline leaves unset is customised by being given a
+        # value, and by nothing else.
+        blank = [v is None or str(v).strip() == "" for v in (current, default)]
+        if any(blank):
+            return blank[0] != blank[1]
         try:
             return float(current) != float(default)
         except (TypeError, ValueError):
             return True
     return str(current) != str(default)
+
+
+# Plain decimal notation and nothing else: ASCII digits on both sides of a "."
+# that is the only separator — never ",", which reads as a thousands mark or a
+# decimal depending on who typed it. float() is far more generous than a
+# form should be: it reads "nan", "inf", "1e400" (inf again), "1_000" and
+# digits from any script, and a NaN compares false against both bounds, so it
+# would pass a range check it is nowhere near.
+_DECIMAL = re.compile(r"-?\d+(?:\.\d+)?", re.ASCII)
+# Longer than any bound a parameter declares could need; past it the string is
+# not a value someone typed.
+_MAX_DIGITS = 20
+
+
+def parse_number(raw: Any) -> float | None:
+    """A submitted number as a finite float, or None if it is not one.
+
+    The one reading of a number both validation and coerce() use, so what is
+    refused and what reaches the command line cannot disagree.
+    """
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw) if math.isfinite(raw) else None
+    text = "" if raw is None else str(raw).strip()
+    if len(text) > _MAX_DIGITS or not _DECIMAL.fullmatch(text):
+        return None
+    value = float(text)
+    return value if math.isfinite(value) else None
 
 
 def coerce(p: dict, raw: Any) -> Any:
@@ -186,10 +238,8 @@ def coerce(p: dict, raw: Any) -> Any:
         # A parameter declared with step "any" is a float: rounding it to an
         # int would silently change the run.
         cast = int if p.get("step") == 1 else float
-        try:
-            return cast(float(raw))
-        except (TypeError, ValueError):
-            return p.get("default", 0)
+        value = parse_number(raw)
+        return p.get("default", 0) if value is None else cast(value)
     return raw if raw is not None else ""
 
 

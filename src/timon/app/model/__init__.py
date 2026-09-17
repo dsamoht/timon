@@ -9,17 +9,27 @@ ever points that way, which is what lets any of this be exercised, and any of
 it be changed, without the other half.
 """
 
-from . import params, validation
-from .experiment import EXPERIMENT, Experiment
+from . import (downloads, history, live, nfstate, params, results,
+               validation)
+from .downloads import DownloadError
+from .experiment import PINNED, EXPERIMENT, Experiment, selectable_pipelines
 from .files import (ACCESS, PermissionRequired, listing, path_columns,
                     resolve, workspace_root)
-from .nextflow import RUN, Engine, Outcome, WorkflowError, WorkflowRun, engine
+from .history import RunUnavailable
+from .live import Live, Tail
+from .nextflow import (RUN, Container, Engine, Outcome, WorkflowError,
+                       WorkflowRun, can_resume, container, engine, output_dir,
+                       stop)
+from .results import OutsideResults
 from .samples import convert_realpaths_to_wildcards, detect_samples_files
 
 __all__ = [
-    "ACCESS", "EXPERIMENT", "Engine", "Experiment", "Outcome",
-    "PermissionRequired", "RUN", "WorkflowError", "WorkflowRun",
-    "convert_realpaths_to_wildcards", "detect_samples_files", "engine",
-    "listing", "params", "path_columns", "resolve", "validation",
-    "workspace_root",
+    "ACCESS", "EXPERIMENT", "Container", "DownloadError", "Engine",
+    "Experiment", "Live", "Outcome", "OutsideResults", "PermissionRequired",
+    "PINNED", "RUN", "RunUnavailable", "Tail", "WorkflowError",
+    "WorkflowRun", "can_resume", "container", "convert_realpaths_to_wildcards",
+    "detect_samples_files", "downloads", "engine",
+    "history", "listing", "live", "nfstate", "output_dir", "params",
+    "path_columns", "resolve", "results", "selectable_pipelines", "stop",
+    "validation", "workspace_root",
 ]

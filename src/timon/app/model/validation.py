@@ -13,23 +13,27 @@ import os
 import re
 from collections import Counter
 
-from ..config import ENV_DATABASES
-from .params import required_trigger
+from .params import parse_number, required_trigger
 
 EXP_ID_RE    = re.compile(r'^[A-Za-z0-9_\-]+$')
-SAMPLE_ID_RE = re.compile(r'^[A-Za-z0-9_\-\.]+$')
+# roshab-cli's own rule (assets/schema_input.json from v0.1.0): a leading dot,
+# hyphen or underscore is refused there, and a sheet timon accepted would
+# otherwise be turned away by the pipeline after the run had started.
+SAMPLE_ID_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*$')
 DATE_RE      = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
 
 def validate_configuration(pipe: dict, exp_id: str, values: dict,
-                           fields: list[dict], dbs: list[dict],
-                           databases: dict) -> list[str]:
+                           fields: list[dict]) -> list[str]:
     """Check a submitted run configuration.
 
-    ``fields`` and ``dbs`` are only what this configuration still uses: a
-    threshold belonging to a skipped step is not worth an error message, and
-    neither is a database whose steps this run does not reach — the field is
-    not even shown, so an error about it would point at nothing.
+    ``fields`` are only what this configuration still uses: a threshold
+    belonging to a skipped step is not worth an error message.
+
+    The databases are not judged here. They are not part of what was
+    submitted — timon finds them — and a missing one is not a mistake in the
+    form: the configuration is saved, and the run waits for the install
+    (``Experiment.is_ready``).
     """
     errors: list[str] = []
 
@@ -42,17 +46,6 @@ def validate_configuration(pipe: dict, exp_id: str, values: dict,
 
     if not pipe:
         errors.append("no pipeline selected")
-
-    for db in dbs:
-        key = db["id"]
-        val = str(values.get(key, databases.get(key, ""))).strip()
-        label = ENV_DATABASES.get(key, {}).get("label", key)
-        if not val:
-            errors.append(f"{label} path is required for this pipeline")
-        # A database can be shipped as a directory or as a tarball, so this
-        # asks that the path exist, not that it be a folder.
-        elif not os.path.exists(val):
-            errors.append(f"{label} path not found: {val!r}")
 
     for p in fields:
         errors.extend(_field_errors(p, values))
@@ -82,34 +75,66 @@ def validate_configuration(pipe: dict, exp_id: str, values: dict,
 def _field_errors(p: dict, values: dict) -> list[str]:
     """The one field, against what it was declared to accept."""
     errors: list[str] = []
-    raw = str(values.get(p["id"], "")).strip()
+    value = values.get(p["id"], "")
+    raw = "" if value is None else str(value).strip()
 
     if p["type"] == "number":
         if raw == "":
+            # A number declared with no default of its own (None) is one the
+            # pipeline leaves unset too, so an empty field is its answer.
+            if p.get("default", "") is None and not p.get("required"):
+                return []
             return [f"'{p['label']}' is required"]
-        try:
-            val = float(raw)
-        except ValueError:
-            return [f"'{p['label']}' must be a number (got: {raw!r})"]
+        val = parse_number(raw)
+        if val is None:
+            shown = raw if len(raw) <= 24 else raw[:24] + "…"
+            return [f"'{p['label']}' must be a plain number (got: {shown!r})"]
         if p.get("step") == 1 and val != int(val):
             errors.append(f"'{p['label']}' must be a whole number (got: {raw!r})")
-        if "min" in p and val < p["min"]:
-            errors.append(f"'{p['label']}' must be ≥ {p['min']}")
-        if "max" in p and val > p["max"]:
-            errors.append(f"'{p['label']}' must be ≤ {p['max']}")
+        # The floor is 0 when a declaration names none (params._normalise);
+        # repeated here for a field that reaches validation un-normalised.
+        low, high = p.get("min", 0), p.get("max")
+        if val < low or (high is not None and val > high):
+            errors.append(f"'{p['label']}' must be between {_bound(low)} and {_bound(high)}"
+                          if high is not None else f"'{p['label']}' must be ≥ {_bound(low)}")
 
     # a select's enum is the whole set of accepted values
-    if p["type"] == "select" and raw and raw not in p.get("enum", []):
+    if p["type"] == "select" and p.get("options_from") and not p.get("enum"):
+        # Looked for in the database and not there: nothing the form could
+        # send would be a value the step can run with.
+        errors.append(f"'{p['label']}': the installed database offers no value for it")
+    elif p["type"] == "select" and raw and raw not in p.get("enum", []):
         allowed = ", ".join(p.get("enum", []))
         errors.append(f"'{p['label']}': {raw!r} is not one of {allowed}")
 
     return errors
 
 
+def _bound(value: float) -> str:
+    """A declared bound as it was written: 60, not 60.0; 100000, not 1e+05."""
+    return f"{int(value):,}".replace(",", "\u202f") if float(value) == int(value) else str(value)
+
+
+def required_columns(pipe: dict) -> list[str]:
+    """Sample-sheet columns every row has to fill.
+
+    All of them unless the pipeline says otherwise — which is what a schema
+    requiring the lot wants, and what timon did before any pipeline needed
+    less. A pipeline whose own schema marks a column optional declares
+    ``required_columns``; insisting on it here would refuse a sheet the
+    pipeline would have taken.
+    """
+    declared = pipe.get("required_columns")
+    return list(declared) if declared is not None else list(pipe["columns"])
+
+
 def validate_samples(rows: list[dict], pipe: dict) -> list[str]:
     """Check a sample sheet, row by row, against the pipeline's columns."""
     errors: list[str] = []
     columns = pipe["columns"]
+    required = required_columns(pipe)
+    # Groups of columns of which a row needs at least one — a schema's "anyOf".
+    either = pipe.get("one_of_columns") or []
     file_column = pipe.get("file_column")
 
     if not rows:
@@ -118,9 +143,14 @@ def validate_samples(rows: list[dict], pipe: dict) -> list[str]:
     for i, row in enumerate(rows):
         row_label = f"row {i + 1}"
 
-        for col in columns:
+        for col in required:
             if not str(row.get(col, "")).strip():
                 errors.append(f"{row_label} · '{col}' is required")
+
+        for group in either:
+            if not any(str(row.get(col, "")).strip() for col in group):
+                named = " or ".join(f"'{col}'" for col in group)
+                errors.append(f"{row_label} · one of {named} is required")
 
         if file_column and file_column in row:
             path = str(row[file_column]).strip()
@@ -138,7 +168,8 @@ def validate_samples(rows: list[dict], pipe: dict) -> list[str]:
             sid = str(row["sample_id"]).strip()
             if sid and not SAMPLE_ID_RE.match(sid):
                 errors.append(
-                    f"{row_label} · 'sample_id': only letters, digits, hyphens, dots and underscores allowed"
+                    f"{row_label} · 'sample_id': must start with a letter or digit, "
+                    "then only letters, digits, hyphens, dots and underscores"
                 )
 
     counts = Counter(str(r.get("sample_id", "")).strip() for r in rows)
