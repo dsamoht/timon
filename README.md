@@ -1,5 +1,5 @@
 # timon
-<img src="https://raw.githubusercontent.com/dsamoht/timon/refs/heads/dev/src/timon/app/static/img/wheel1.svg?token=GHSAT0AAAAAAEFLO53Y7Z6CMFPIFY3JALS22VNJ6FQ" alt="A ship's wheel" height="120">
+<img src="src/timon/app/static/img/wheel1.svg" alt="A ship's wheel" height="120">
 
 **t**oolkit of **i**ntegrated **m**icrobi**o**me analysis with support for lo**n**g reads.
 
