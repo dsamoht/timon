@@ -20,6 +20,19 @@ data-param="{{ p.id }}"
 {%- if not p.active %} hidden{% endif %}
 {%- endmacro %}
 
+{# What "reset" puts back. JSON, so a number the pipeline leaves unset stays
+   null rather than becoming the string "None", and a flag stays a boolean. #}
+{% macro default_of(p) -%}
+data-default="{{ p.default | tojson | forceescape }}"
+{%- endmacro %}
+
+{# Per section, not per form: a run customises a group or two, and putting
+   one of them back should not throw away what was chosen in the others. #}
+{% macro reset_button(section) -%}
+<button type="button" class="param-reset" onclick="resetSection(event, this)"
+        title="put {{ section.title or 'these parameters' }} back to the pipeline's defaults">reset</button>
+{%- endmacro %}
+
 {% macro section_body(section, values) %}
     {% set live_fields = section.fields | selectattr('active') | list %}
     {% if section.fields %}
@@ -32,25 +45,42 @@ data-param="{{ p.id }}"
 
             {% if p.type == 'select' %}
             {% set current = values.get(p.id, p.default) | string %}
-            <select class="fi" id="p-{{ p.id }}" name="{{ p.id }}">
+            <select class="fi" id="p-{{ p.id }}" name="{{ p.id }}" {{ default_of(p) }}>
                 {% for opt in p.enum %}
                 <option value="{{ opt }}" {% if opt == current %}selected{% endif %}>{{ opt }}</option>
                 {% endfor %}
             </select>
 
             {% elif p.type == 'number' %}
-            <input type="number" class="fi" id="p-{{ p.id }}" name="{{ p.id }}"
-                   value="{{ values.get(p.id, p.default) }}"
-                   step="{{ p.step | default(1) }}"
-                   {% if p.min is defined %}min="{{ p.min }}"{% endif %}
-                   {% if p.max is defined %}max="{{ p.max }}"{% endif %}>
+            {# None is a number the pipeline leaves unset: an empty field, never "None". #}
+            {# Text, not type="number": a number field is drawn in the
+               browser's locale, so a French one shows 0.5 as "0,5" and hands
+               a phone the comma keypad, and it reports a half-typed value as
+               empty. timon reads "." and nothing else (params.parse_number),
+               so the field shows exactly what will be sent.
+
+               The bounds ride along for the page to enforce as the value is
+               typed; model.validation refuses the same things on save, and
+               that is the answer that counts. #}
+            {% set whole = (p.step | default(1)) == 1 %}
+            <input type="text" class="fi" id="p-{{ p.id }}" name="{{ p.id }}"
+                   data-default="{{ (p.default_text if p.default is not none else none) | tojson | forceescape }}"
+                   value="{{ p.text }}"
+                   data-min="{{ p.min | default(0) }}"
+                   {% if p.max is defined %}data-max="{{ p.max }}"{% endif %}
+                   inputmode="{{ 'numeric' if whole else 'decimal' }}"
+                   data-number="{{ 'int' if whole else 'float' }}"
+                   {% if p.default is not none or p.required %}data-required{% endif %}
+                   {% if p.placeholder or p.default is none %}placeholder="{{ p.placeholder or 'pipeline default' }}"{% endif %}
+                   aria-describedby="p-{{ p.id }}-err"
+                   autocomplete="off" spellcheck="false">
 
             {% elif p.path %}
             {# A path is found, not remembered: the same browse button the
                sample sheet's path columns have, told through data-pick what
                this parameter can take. #}
             <div class="cell-path">
-                <input type="text" class="fi" id="p-{{ p.id }}" name="{{ p.id }}"
+                <input type="text" class="fi" id="p-{{ p.id }}" name="{{ p.id }}" {{ default_of(p) }}
                        value="{{ values.get(p.id, p.default) }}"
                        {% if p.placeholder %}placeholder="{{ p.placeholder }}"{% endif %}>
                 <button type="button" class="pick-btn" onclick="openBrowser(this)"
@@ -65,11 +95,21 @@ data-param="{{ p.id }}"
             </div>
 
             {% else %}
-            <input type="text" class="fi" id="p-{{ p.id }}" name="{{ p.id }}"
+            <input type="text" class="fi" id="p-{{ p.id }}" name="{{ p.id }}" {{ default_of(p) }}
                    value="{{ values.get(p.id, p.default) }}"
                    {% if p.placeholder %}placeholder="{{ p.placeholder }}"{% endif %}>
             {% endif %}
 
+            {# Label, control and everything under the control are three rows
+               of the grid's own (subgrid), so a label that wraps to two lines
+               cannot push its input below its neighbours'. #}
+            <div class="field-notes">
+            {% if p.type == 'number' %}
+            <span class="field-error" id="p-{{ p.id }}-err" role="alert" hidden></span>
+            {% endif %}
+            {% if p.options_note %}
+            <span class="field-help">{{ p.options_note }}</span>
+            {% endif %}
             {% if p.description %}
             <span class="field-help">{{ p.description }}</span>
             {% endif %}
@@ -83,6 +123,7 @@ data-param="{{ p.id }}"
                 <span class="field-help">{{ p.help_text }}</span>
             </details>
             {% endif %}
+            </div>
         </div>
         {% endfor %}
     </div>
@@ -93,7 +134,7 @@ data-param="{{ p.id }}"
     <div class="check-row{% if live_fields %} mt-3.5{% endif %}"{% if not live_flags %} hidden{% endif %}>
         {% for p in section.flags %}
         <label class="check-item" {{ field_state(p) }}{% if p.help_text or p.description %} title="{{ p.help_text or p.description }}"{% endif %}>
-            <input type="checkbox" name="{{ p.id }}"
+            <input type="checkbox" name="{{ p.id }}" {{ default_of(p) }}
                    {% if values.get(p.id, p.default) %}checked{% endif %}>
             {{ p.label }}
         </label>
@@ -113,8 +154,7 @@ data-param="{{ p.id }}"
 <details class="param-section"{% if section.open %} open{% endif %}{% if not section.active %} hidden{% endif %}>
     <summary class="param-section-head">
         <span class="param-section-title">{{ section.title }}</span>
-        {# The count is what the run uses, not what the pipeline declares. #}
-        <span class="param-section-count">{{ (section.fields + section.flags) | selectattr('active') | list | length }}</span>
+        {{ reset_button(section) }}
     </summary>
     {% if section.description %}
     <p class="param-section-desc">{{ section.description }}</p>
@@ -124,6 +164,7 @@ data-param="{{ p.id }}"
 {% else %}
 {# A single unnamed group — there is nothing to fold it away from. #}
 <div class="param-section"{% if not section.active %} hidden{% endif %}>
+    <div class="param-section-head param-section-head-bare">{{ reset_button(section) }}</div>
     {{ section_body(section, values) }}
 </div>
 {% endif %}

@@ -1,5 +1,6 @@
 .venv
 uv.lock
+run.sh
 
 # Reference data — too large to commit; point TIMON_DB_DIR at it
 data/
@@ -8,6 +9,7 @@ data/
 imports/
 work/
 .nextflow*
+timon_results/
 
 # Node toolchain — dev-only; the built stylesheet is committed
 node_modules/
@@ -17,6 +19,7 @@ build/
 dist/
 *.egg-info/
 __pycache__/
+.pytest_cache/
 
 **/.DS_Store
 .DS_Store

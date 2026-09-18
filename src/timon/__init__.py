@@ -1,4 +1,4 @@
-"""timon — Toolkit of Integrated MicrobiOme analysis with support for Nanopore data."""
+"""timon — Toolkit of Integrated MicrobiOme analysis with support for loNg reads."""
 
 __version__ = "0.1.0"
 # The year __version__ was released, shown in the page footer. Bumped with the
