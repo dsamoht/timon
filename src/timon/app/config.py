@@ -128,9 +128,7 @@ DB_SOURCES = {
                "cyanobacteriota_ncbi_dRep_n220.tar.gz",
         "archive": True,
         "install_as": "cyanobacteriota_ncbi_dRep_n220",
-        "description": "220 dereplicated cyanobacterial genomes, which CoverM "
-                       "maps the reads against. Any set of FASTA files is a "
-                       "valid answer, so TIMON_GENOMES_DB can name a smaller one.",
+        "description": "220 dereplicated cyanobacterial genomes.",
     },
 }
 
@@ -237,7 +235,7 @@ DATABASE_BUNDLE = ["kraken_db", "genomes_db"]
 PIPELINES = {
     "roshab-cli": {
         "name": "roshab-cli",
-        "description": "Taxonomic classification and evaluation of cyanotoxin biosynthesis potential from nanopore reads",
+        "description": "Taxonomic classification and assessment of cyanotoxin biosynthesis potential from nanopore reads",
         "icon": "img/bloom_orig.png",
         "pipeline": "dsamoht/roshab-cli",
         # The first release. Bumping it is a timon release, and the defaults
@@ -265,7 +263,7 @@ PIPELINES = {
         # the database download *instead of* an analysis, which is not what
         # this form builds.
         "param_groups": {
-            "workflow": "Which screening route the run takes. Taxonomic profiling runs in every mode.",
+            "workflow": "Which gene screening route the run takes. Taxonomic profiling runs in every mode.",
             "read QC": "Chopper trimming and filtering thresholds.",
             "taxonomic profiling": "Kraken2, Bracken and CoverM options.",
             "read screening": "The `reads` route: cyanotoxin genes called straight off the QC'd reads with DIAMOND.",
@@ -400,7 +398,7 @@ PIPELINES = {
     },
     "mag-ont": {
         "name": "mag-ont",
-        "description": "Automation of metagenome assembly and binning with support for nanopore reads",
+        "description": "Long reads-first metagenome assembly and binning with support for short reads",
         "icon": "img/mag-icon.png",
         "pipeline": "dsamoht/mag-ont",
         # The nf-core template release. Bumping it is a timon release, and the
@@ -430,7 +428,7 @@ PIPELINES = {
         "required_columns": ["sample_id", "group"],
         "one_of_columns": [["assembly_fasta", "long_reads"]],
         "param_groups": {
-            "read QC":  "Quality control and filtering of the long reads.",
+            "read QC":  "Quality control and filtering of long reads.",
             "assembly": "How the long reads are assembled, and — with Flye — polished.",
             "binning":  "Which binners run, and how they are configured.",
             "bin QC & reporting": "Quality assessment and classification of the recovered bins, and the run report. "
