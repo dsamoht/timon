@@ -46,4 +46,4 @@ sample sheet, no parameters, no databases to install first.
 It runs the selected pipeline's test profile, which fetches every files it needs. The whole chain is tested: nextflow, docker, the live console and results. It downloads a few hundred megabytes the first time and takes a few minutes to run. If everything runs succesfully, you are good to go on your data.
 
 ## Acknowledgment
-##### ✏️ logo by: Raphaëlle B. Germain
+##### ✏️🎨 logo by: Raphaëlle B. Germain  
