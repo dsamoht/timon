@@ -249,8 +249,12 @@ def _reap() -> None:
     gives an exit code. A run whose timon is gone is closed off from
     nextflow's own history instead, when someone next reads the record.
     """
+    # Held before waiting, because outcome() lets go of it: it is what says
+    # which run has just ended, and without it every page but the one
+    # watching would be told only that nothing is going.
+    entry = model.RUN.entry
     model.RUN.outcome()
-    _broadcast(_target())
+    _broadcast(_target(), over=entry)
 
 
 # ── stopping one ─────────────────────────────────────────────────────────────

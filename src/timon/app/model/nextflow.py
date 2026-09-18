@@ -116,27 +116,39 @@ def engine() -> Engine:
 # before the run rather than in the log, so it is asked the same way nextflow
 # is: found, where, which version, and the run button waits on the answer.
 
-# The command each profile needs on this machine. A profile absent from here
-# is one timon has no way to look for — "wave" containerises tasks in Seqera's
-# cloud, and there is nothing local to find — and such a profile is reported
-# ready, because refusing a run over a check that cannot be made is worse than
-# letting nextflow give its own error.
+# The command each profile needs on this machine. Nextflow names a dozen
+# engines; timon supports these, because every one of them is a way for a run
+# to fail that someone has to be able to reproduce — and these are the ones the
+# pipelines are actually run under. apptainer is here beside singularity rather
+# than behind it: it is the fork, not an alias, and a site that has migrated
+# has only `apptainer` on PATH. The rest are refused by the pipeline's own
+# "profiles" list in config.py, which is the gate; this table is what is looked
+# for once a profile is allowed.
+#
+# A profile absent from here is one timon has no way to look for — an engine
+# that provisions tasks somewhere other than this machine leaves nothing local
+# to find — and such a profile is reported ready, because refusing a run over a
+# check that cannot be made is worse than letting nextflow give its own error.
 CONTAINER_BINARIES = {
-    "docker":       "docker",
-    "podman":       "podman",
-    "singularity":  "singularity",
-    "apptainer":    "apptainer",
-    "shifter":      "shifter",
-    "charliecloud": "ch-run",
-    "conda":        "conda",
-    "mamba":        "mamba",
+    "docker":      "docker",
+    "singularity": "singularity",
+    "apptainer":   "apptainer",
+    "conda":       "conda",
 }
 
 # Of those, the ones that are a client talking to a daemon, where being on
 # PATH says nothing about whether anything will run: Docker Desktop installed
 # and Docker Desktop started are different states, and only the second one is
-# a machine a run works on.
-DAEMON_PROFILES = {"docker", "podman"}
+# a machine a run works on. The other three run in the calling process, so
+# there is nothing to ask them. The value is how to ask, and the question
+# is the cheapest one that still reaches past the client: `version` makes the
+# server name its own version, which is the whole of what is being asked, and
+# costs a fraction of `info` and its full inventory — 33 ms against 227 ms
+# here, in both the up and the down case. That is paid on every pipeline
+# switch, so it is worth not asking for what is thrown away.
+DAEMON_PROBES = {
+    "docker": ("version", "--format", "{{.Server.Version}}"),
+}
 
 # How long a daemon's answer is trusted for. A version cannot change under a
 # running timon and is cached outright; whether the daemon is up changes all
@@ -152,7 +164,7 @@ _daemon_answers: dict[str, tuple[float, bool]] = {}
 class Container:
     """What is known about the container engine a run would be launched under."""
 
-    profile: str             # the nextflow profile: docker, apptainer, …
+    profile: str             # the nextflow profile: docker, singularity, …
     binary: str = ""         # what to look for; "" when there is nothing local
     path: str = ""           # where it was found; "" when it was not
     version: str = ""        # what `<binary> --version` said
@@ -192,11 +204,12 @@ def _container_version(exe: str) -> str:
     return lines[0].strip() if lines else ""
 
 
-def _daemon_answers_now(exe: str) -> bool:
+def _daemon_answers_now(exe: str, probe: tuple[str, ...]) -> bool:
     """Whether the engine behind this client will actually run a container.
 
-    `info` is the cheapest question that reaches past the client: it fails
-    while the daemon is down, which is exactly the state a laptop is in
+    ``probe`` is the engine's own from `DAEMON_PROBES`, and what makes any of
+    them an answer is the same thing: the question reaches past the client, so
+    it fails while the daemon is down — exactly the state a laptop is in
     between booting and starting Docker.
     """
     now = time.monotonic()
@@ -204,7 +217,7 @@ def _daemon_answers_now(exe: str) -> bool:
     if cached is not None and now - cached[0] < DAEMON_TTL:
         return cached[1]
     try:
-        proc = subprocess.run([exe, "info"], capture_output=True,
+        proc = subprocess.run([exe, *probe], capture_output=True,
                               text=True, timeout=20)
         answered = proc.returncode == 0
     except (OSError, subprocess.SubprocessError):
@@ -233,7 +246,8 @@ def container(profile: str = "") -> Container:
         binary=binary,
         path=exe,
         version=_container_version(exe),
-        daemon=_daemon_answers_now(exe) if name in DAEMON_PROFILES else None,
+        daemon=(_daemon_answers_now(exe, DAEMON_PROBES[name])
+                if name in DAEMON_PROBES else None),
     )
 
 

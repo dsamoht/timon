@@ -1,38 +1,13 @@
-name: timon_v0.1.0
+name: timon
 channels:
   - conda-forge
   - bioconda
 dependencies:
-  - python=3.10
-  - bracken
-  - bwa-mem2
-  - chopper
-  - concoct
-  - coreutils
-  - coverm
-  - das_tool
-  - diamond
-  - flye
-  - gtdbtk
-  - kraken2
-  - krakentools
-  - maxbin2
-  - medaka
-  - metabat2
-  - minimap2
-  - multiqc
-  - nanoplot
-  - nextflow
-  - porechop_abi
-  - samtools
-  - semibin
-  - seqkit
+  - python>=3.10
+  - nextflow>=26.04.0
+  - flask>=3.0
+  - flask-socketio>=5.3
+  - pandas>=2.0
   - pip
   - pip:
-      - Flask==3.0.0
-      - Flask-SocketIO==5.3.5
-      - pandas==2.1.4
-      - matplotlib==3.8.2
-      - biopython
-      - seaborn
-      - pysam
+      - .

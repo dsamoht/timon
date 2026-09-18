@@ -93,7 +93,7 @@ def engines(monkeypatch):
         monkeypatch.setattr(nextflow.shutil, "which",
                             lambda name: f"/usr/bin/{name}" if name in present else None)
         monkeypatch.setattr(nextflow, "_container_version", lambda _: "")
-        monkeypatch.setattr(nextflow, "_daemon_answers_now", lambda _: daemon)
+        monkeypatch.setattr(nextflow, "_daemon_answers_now", lambda *_: daemon)
     return machine
 
 
@@ -107,9 +107,9 @@ def test_a_missing_container_engine_is_reported_not_raised(engines):
 
 
 def test_an_engine_with_no_daemon_of_its_own_is_ready_once_it_is_there(engines):
-    """Nothing to ask: apptainer runs the container in the calling process."""
-    engines("apptainer")
-    found = nextflow.container("apptainer")
+    """Nothing to ask: singularity runs the container in the calling process."""
+    engines("singularity")
+    found = nextflow.container("singularity")
     assert found.found is True
     assert found.daemon is None
     assert found.ready is True
@@ -153,15 +153,15 @@ def test_a_daemons_answer_is_not_remembered_for_the_life_of_the_process(monkeypa
 
     monkeypatch.setattr(nextflow.subprocess, "run", probe)
     nextflow._daemon_answers.clear()
-    assert nextflow._daemon_answers_now("/usr/bin/docker") is False
+    assert nextflow._daemon_answers_now("/usr/bin/docker", ("info",)) is False
     # Held briefly, so a page and the saves behind it share one probe...
-    assert nextflow._daemon_answers_now("/usr/bin/docker") is False
+    assert nextflow._daemon_answers_now("/usr/bin/docker", ("info",)) is False
     assert len(calls) == 1
     # ...but not past that.
     monkeypatch.setattr(nextflow.time, "monotonic",
                         lambda: nextflow._daemon_answers["/usr/bin/docker"][0]
                                 + nextflow.DAEMON_TTL + 1)
-    assert nextflow._daemon_answers_now("/usr/bin/docker") is True
+    assert nextflow._daemon_answers_now("/usr/bin/docker", ("info",)) is True
 
 
 def test_an_engine_that_never_answers_is_not_one_to_start_a_run_against(monkeypatch):
@@ -170,7 +170,36 @@ def test_an_engine_that_never_answers_is_not_one_to_start_a_run_against(monkeypa
 
     monkeypatch.setattr(nextflow.subprocess, "run", hangs)
     nextflow._daemon_answers.clear()
-    assert nextflow._daemon_answers_now("/usr/bin/docker") is False
+    assert nextflow._daemon_answers_now("/usr/bin/docker", ("info",)) is False
+
+
+def test_only_the_daemon_engine_is_asked_anything(monkeypatch):
+    """docker's `version` is the cheap way to make a server name itself, and it
+    is asked again on every pipeline switch. The other supported engines run in
+    the calling process, so being on PATH is the whole of the answer and
+    nothing is spent asking them.
+    """
+    asked = []
+
+    def probe(cmd, **kw):
+        asked.append(cmd)
+        return type("P", (), {"returncode": 0})()
+
+    monkeypatch.setattr(nextflow.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(nextflow, "_container_version", lambda _: "")
+    monkeypatch.setattr(nextflow.subprocess, "run", probe)
+    for name in ("docker", "singularity", "apptainer", "conda"):
+        nextflow._daemon_answers.clear()
+        assert nextflow.container(name).daemon is (True if name == "docker" else None)
+
+    assert asked == [["/usr/bin/docker", "version", "--format", "{{.Server.Version}}"]]
+
+
+def test_every_engine_asked_for_a_daemon_is_one_timon_looks_for():
+    """A profile misspelt here would be silently reported ready: nothing
+    probes it, so being on PATH would be the whole of the answer.
+    """
+    assert set(nextflow.DAEMON_PROBES) <= set(nextflow.CONTAINER_BINARIES)
 
 
 # ── refusals ─────────────────────────────────────────────────────────────────
