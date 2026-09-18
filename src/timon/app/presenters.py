@@ -20,7 +20,7 @@ from pathlib import Path
 
 from ..paths import REFERENCE_DATA, db_root
 from . import model
-from .config import DATABASE_BUNDLE
+from .config import DATABASE_BUNDLE, Config
 from .model import params as P
 
 
@@ -394,6 +394,21 @@ def run_view(experiment: model.Experiment, engine: model.Engine,
     }
 
 
+def release_url(version: str) -> str:
+    """Where the version in the brand points.
+
+    The version is the git tag (see pyproject's hatch-vcs block), so a released
+    build names a page that exists and is linked straight to it. A build made
+    between tags carries a ``.dev`` segment or a ``+`` local part and has no
+    release of its own, so the list is the honest answer — a link to
+    ``/releases/tag/v0.1.1.dev2+g3fc222c`` would only be a 404.
+    """
+    released = version and ".dev" not in version and "+" not in version
+    if not released:
+        return f"{Config.REPO_URL}/releases"
+    return f"{Config.REPO_URL}/releases/tag/v{version}"
+
+
 def index_view(experiment: model.Experiment, engine: model.Engine,
                container: model.Container, version: str,
                release_year: str) -> dict:
@@ -422,6 +437,8 @@ def index_view(experiment: model.Experiment, engine: model.Engine,
         # are expected to be, before the user has shown otherwise.
         "input_folder": experiment.input_folder,
         "version": version,
+        # The version says what is running; the link says what that is.
+        "release_url": release_url(version),
         "release_year": release_year,
         **params_view(experiment),
     }

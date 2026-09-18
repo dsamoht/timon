@@ -15,6 +15,11 @@ class Config:
     # singularity, apptainer and conda (model.nextflow.CONTAINER_BINARIES), and
     # every pipeline declares which of those it supports; see "profiles" below.
     PROFILE       = os.getenv("TIMON_PROFILE", "docker")
+    # Where timon itself is published. The version in the page links into it,
+    # so a user can read what the build they are running is — declared here
+    # rather than in the template, because it is the same fact pyproject's
+    # Homepage states and neither half should be guessing it.
+    REPO_URL      = "https://github.com/dsamoht/timon"
 
 # ── reference databases ──────────────────────────────────────────────────────
 #

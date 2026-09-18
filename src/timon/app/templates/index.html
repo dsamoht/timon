@@ -25,11 +25,13 @@
         </button>
 
         <!-- Below the tablet tier the sidebar (and with it the brand block)
-             is a closed drawer, so the logo comes back into the topbar. -->
-        <a class="brand-mini hidden shrink-0 items-center no-underline max-tablet:flex"
-           href="#" aria-label="timon">
+             is a closed drawer, so the logo comes back into the topbar.
+             Not a link: the only thing in the mark worth clicking is the
+             version, which links to its own release, and an anchor around
+             it would be an anchor inside an anchor. -->
+        <span class="brand-mini hidden shrink-0 items-center max-tablet:flex">
             {% include '_brand.html' %}
-        </a>
+        </span>
 
         <div class="min-w-0 max-tablet:hidden">
             <h1 class="text-lg font-semibold tracking-[-0.015em] text-ink"
@@ -51,9 +53,7 @@
     <aside class="sidebar" id="sidebar">
 
         <div class="brand">
-            <a class="no-underline" href="#" aria-label="timon">
-                {% include '_brand.html' %}
-            </a>
+            {% include '_brand.html' %}
         </div>
 
         <nav class="sidebar-section sidebar-nav mt-5 px-3">
@@ -594,11 +594,14 @@
 
     function setWheelRunning(on) { wheelRunning = on; syncWheel(); }
 
-    // Clicking the logo turns it. Bound on the mark rather than its anchor so
-    // the href stays a plain link target, and preventDefault keeps the '#'
-    // from scrolling the workspace back to the top.
+    // Clicking the logo turns it — except on the version, which is a real
+    // link to the release this build came from and has to be left to open.
     document.querySelectorAll('.brand-mark').forEach(mark => {
-        mark.addEventListener('click', ev => { ev.preventDefault(); turnWheel(1400); });
+        mark.addEventListener('click', ev => {
+            if (ev.target.closest('.brand-version')) return;
+            ev.preventDefault();
+            turnWheel(1400);
+        });
     });
 
     // ── Toast ───────────────────────────────────────────────────

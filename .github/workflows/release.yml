@@ -1,8 +1,9 @@
 name: Release
 
 # A tag is the trigger, so what is published is always a commit that exists.
-# The version itself comes from src/timon/__init__.py; the tag only has to
-# agree with it, which the first job checks before anything is uploaded.
+# The version *is* the tag (hatch-vcs), so there is nothing to keep in step —
+# only something to confirm: the check below catches a checkout that arrived
+# without its tags, which would otherwise publish a dev version.
 on:
   push:
     tags: ["v*"]
@@ -16,18 +17,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # hatch-vcs reads the version off the tag
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install build twine
-      - name: Tag matches __version__
+      - run: python -m build
+      - name: Built version is the tag
         # A version can never be re-uploaded to PyPI, so a mismatch has to
-        # stop here rather than after the upload.
+        # stop here rather than after the upload. It can only differ if the
+        # tag was not there to be read — a shallow checkout, or a build off
+        # a branch — in which case what is in dist/ is a dev version.
         run: |
           tag="${GITHUB_REF_NAME#v}"
-          src=$(python -c "import re,pathlib; print(re.search(r'__version__ = \"(.+?)\"', pathlib.Path('src/timon/__init__.py').read_text()).group(1))")
-          [ "$tag" = "$src" ] || { echo "::error::tag $tag != __version__ $src"; exit 1; }
-      - run: python -m build
+          built=$(ls dist/*.whl | head -1 | cut -d- -f2)
+          [ "$tag" = "$built" ] || { echo "::error::tag $tag != built $built"; exit 1; }
       # The page only works if its stylesheet and templates ship.
       - name: Wheel carries the page
         run: |

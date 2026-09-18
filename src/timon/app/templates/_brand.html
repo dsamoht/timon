@@ -4,6 +4,11 @@
    (see .brand-mark in app.css); the name beside it is set in the page's own
    mono, the same face the footer signs off in.
 
+   The version is a link into the release it was built from — the tag is
+   where the number comes from (pyproject, hatch-vcs), so the page can always
+   say what this build is. It is the one link in the mark, which is why
+   nothing wraps the mark itself any more.
+
    Included in both the sidebar and the topbar, which is why it carries no
    id: the script drives every .wheel on the page at once. Sized by
    --brand-h on whichever element places it — and on a phone the wheel is
@@ -15,6 +20,8 @@
     </span>
     <span class="brand-lockup">
         <span class="brand-word">timon</span>
-        <span class="brand-version">v{{ version }}</span>
+        <a class="brand-version" href="{{ release_url }}"
+           target="_blank" rel="noopener noreferrer"
+           title="what is in this release">v{{ version }}</a>
     </span>
 </span>

@@ -399,6 +399,27 @@ def test_a_commit_a_run_was_recorded_at_is_shortened():
     assert presenters.revision_label("83c51339c17614783f3f425f4fcd32f1123c3134") == "83c5133"
 
 
+# ── timon's own version ──────────────────────────────────────────────────────
+#
+# The version is the git tag (hatch-vcs), so the brand can link at the release
+# it names — as long as there is one. A build made between tags is not a
+# release and must not claim a page of its own.
+
+@pytest.mark.parametrize("version", ["0.1.0", "1.2.3", "1.0.0rc1", "0.2.0.post1"])
+def test_a_released_version_links_to_its_own_release(version):
+    assert presenters.release_url(version).endswith(f"/releases/tag/v{version}")
+
+
+@pytest.mark.parametrize("version", [
+    "0.1.1.dev2+g3fc222c",   # built between tags
+    "0.1.0+dirty",           # built off an edited tree
+    "0+unknown",             # a source tree that was never installed
+    "",                      # nothing to go on at all
+])
+def test_a_version_with_no_release_behind_it_links_to_the_list(version):
+    assert presenters.release_url(version).endswith("/releases")
+
+
 # ── numbers in the form ──────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("value, shown", [
