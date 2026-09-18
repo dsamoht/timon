@@ -500,10 +500,16 @@
     .brand .brand-word      { font-size: calc(var(--brand-h) * 0.30); }
     .brand-mini .brand-word { font-size: calc(var(--brand-h) * 0.40); }
 
+    /* A link to the release this build was made from — the version is the
+       git tag, so there is always a page for it to name. Underlined only on
+       hover: under the wordmark it is part of the mark, and a permanent rule
+       under it would read as a second word rather than as what it is. */
     .brand-version {
-        @apply font-mono font-medium leading-none text-brand;
+        @apply font-mono font-medium leading-none text-brand no-underline;
         font-size: calc(var(--brand-h) * 0.085);
     }
+    a.brand-version:hover { @apply underline; }
+    a.brand-version:focus-visible { @apply outline-2 outline-offset-2 outline-brand; }
     .brand-mini .brand-version { font-size: calc(var(--brand-h) * 0.24); }
 
     /* On a phone the topbar cannot spare the width for a wheel that small

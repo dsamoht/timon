@@ -28,6 +28,8 @@ jobs:
         python: ["3.10", "3.13"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # hatch-vcs reads the version off the tag
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
@@ -42,6 +44,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # hatch-vcs reads the version off the tag
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

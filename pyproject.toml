@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.27"]  # PEP 639 license expression
+requires = ["hatchling>=1.27", "hatch-vcs>=0.4"]  # PEP 639 license expression; version from the tag
 build-backend = "hatchling.build"
 
 [project]
@@ -42,8 +42,12 @@ Issues = "https://github.com/dsamoht/timon/issues"
 [project.scripts]
 timon = "timon.cli:main"
 
+# The git tag is the version, and the only place one is written. A build off a
+# tag is that release exactly; a build between tags says so in its own version
+# (0.1.1.devN+g<sha>), which is what the brand's link reads to decide whether
+# there is a release page to point at.
 [tool.hatch.version]
-path = "src/timon/__init__.py"
+source = "vcs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/timon"]
