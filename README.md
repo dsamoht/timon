@@ -1,5 +1,5 @@
 # timon
-<img src="https://raw.githubusercontent.com/dsamoht/timon/main/src/timon/app/static/img/wheel1.svg" alt="A ship's wheel" height="120">
+<img src="https://raw.githubusercontent.com/dsamoht/timon/refs/heads/dev/src/timon/app/static/img/wheel1.svg?token=GHSAT0AAAAAAEFLO53Y7Z6CMFPIFY3JALS22VNJ6FQ" alt="A ship's wheel" height="120">
 
 **t**oolkit of **i**ntegrated **m**icrobi**o**me analysis with support for lo**n**g reads.
 
@@ -19,8 +19,8 @@ timon is a local GUI made to prepare and launch nextflow pipelines. It now suppo
 ```console
 $ pip install timon-gui
 ```
-Installs the `timon` command. Nextflow and a container engine are not python
-packages, so pip does not bring them — install them yourself, or use the conda
+Installs the `timon` command. Nextflow and container engines are not python
+packages — install them yourself, or use the conda
 environment:
 
 ```console
