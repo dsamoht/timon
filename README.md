@@ -30,7 +30,7 @@ $ conda env create -f environment.yaml
 ## Usage
 ```console
 $ timon
-timon 0.1.0 → http://127.0.0.1:54123   (Ctrl-C to quit)
+timon <version> → http://127.0.0.1:54123   (Ctrl-C to quit)
 ```
 The app will open at the specified adress.
 
