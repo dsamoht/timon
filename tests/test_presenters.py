@@ -79,9 +79,10 @@ def test_a_running_engine_shows_its_version_under_its_profile_name():
 
 def test_an_engine_with_no_version_to_give_is_still_reported_ready():
     view = presenters.container_view(
-        Container(profile="apptainer", binary="apptainer", path="/usr/bin/apptainer"))
+        Container(profile="singularity", binary="singularity",
+                  path="/usr/bin/singularity"))
     assert view["ok"] is True
-    assert view["label"] == "apptainer ready"
+    assert view["label"] == "singularity ready"
 
 
 def test_a_profile_with_nothing_local_is_not_reported_as_an_approval():

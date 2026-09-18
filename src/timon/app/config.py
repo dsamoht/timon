@@ -11,8 +11,9 @@ class Config:
     # ceiling, the sample sheet — goes in here under a leading dot, so what
     # the results view walks is the runs themselves.
     OUTPUT_FOLDER = os.getenv("OUTPUT_DIR", "timon_results")
-    # Container engine Nextflow provisions tasks with. Every pipeline declares
-    # which of these it supports; see "profiles" below.
+    # Container engine Nextflow provisions tasks with. timon supports docker,
+    # singularity, apptainer and conda (model.nextflow.CONTAINER_BINARIES), and
+    # every pipeline declares which of those it supports; see "profiles" below.
     PROFILE       = os.getenv("TIMON_PROFILE", "docker")
 
 # ── reference databases ──────────────────────────────────────────────────────
@@ -153,7 +154,10 @@ DATABASE_BUNDLE = ["kraken_db", "genomes_db"]
 #                             a branch or a bare commit, so what a run used has a
 #                             name upstream (tests/test_config.py holds that).
 #                             None refuses to run (see model.nextflow.build_command)
-#   profiles                  container engines the pipeline supports
+#   profiles                  container engines the pipeline supports, of those
+#                             timon does (model.nextflow.CONTAINER_BINARIES): a
+#                             pipeline declaring more is listed with the
+#                             intersection, and a profile absent here is refused
 #   columns, file_column      sample-sheet columns, and which one holds reads
 #   reference_data            the databases the pipeline reads, by the keys of
 #                             timon.paths.REFERENCE_DATA, each passed under its
@@ -405,10 +409,11 @@ PIPELINES = {
         # --medaka_model or --skip_medaka with any assembler but flye, which
         # is what the active_when on those two keeps off the command line.
         "revision": "v1.4.0",
-        # As declared by the tag's nextflow.config. "debug", "gpu", "drac" and the
-        # test profiles are omitted: they are not container engines.
-        "profiles": ["docker", "singularity", "apptainer", "podman",
-                     "shifter", "charliecloud", "wave", "conda", "mamba"],
+        # Those of the tag's nextflow.config that timon supports (see
+        # model.nextflow.CONTAINER_BINARIES). The pipeline declares more —
+        # podman, shifter, charliecloud, wave, mamba — and "debug", "gpu" and
+        # "drac" besides, which are not container engines at all.
+        "profiles": ["docker", "singularity", "apptainer", "conda"],
         "file_column": "long_reads",
         "reference_data": ["gtdbtk_db"],
         # The pipeline's own rule for gtdbtk_db: required unless --skip_gtdbtk

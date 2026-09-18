@@ -1279,6 +1279,11 @@
 
     // ── 1. Pipeline selection ───────────────────────────────────
     function selectPipe(id) {
+        // Clicking the pipeline already selected is not a switch: a switch
+        // throws away the configuration and the sample sheet, and nobody
+        // clicking the card they are already on is asking for that.
+        const card = document.querySelector(`.pipeline-card[data-pipe-id="${id}"]`);
+        if (card && card.classList.contains('selected')) return;
         const fd = new FormData();
         fd.append('pipeline_select', id);
         fetch('/set_pipeline', { method: 'POST', body: fd })
@@ -2011,7 +2016,15 @@
         document.querySelector('.shell').classList.remove('app-locked');
         document.getElementById('cancel-btn').style.display = 'none';
         document.getElementById('run-btn').classList.remove('running');
-        if (!ended) { setRunBtnState('▶', 'run analysis', 'Run analysis'); return; }
+        if (!ended) {
+            setRunBtnState('▶', 'run analysis', 'Run analysis');
+            // Nothing is going, and there is no record to name how it went —
+            // a quick test leaves none, and neither does a run this page was
+            // never told the end of. The chip said "running"; saying nothing
+            // is the only thing left that is true.
+            termState('');
+            return;
+        }
         setRunBtnState('▶', 'run again', 'Run analysis again');
         termLine(`── ${ended.id} ${ended.status.label} ──`,
                  ended.status.tone === 'ok' ? 't-green' : 't-red');
