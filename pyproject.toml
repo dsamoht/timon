@@ -1,31 +1,43 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]  # PEP 639 license expression
 build-backend = "hatchling.build"
 
 [project]
-name = "timon"
+# The import package and the `timon` command keep their name; only the
+# distribution is renamed, because `timon` on PyPI is an unrelated project.
+name = "timon-gui"
 dynamic = ["version"]
-description = "Toolkit of Integrated MicrobiOme analysis with support for Nanopore data"
+description = "Toolkit of Integrated MicrobiOme analysis with support for loNg reads"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Thomas Deschênes" }]
+license = "MIT"
+license-files = ["LICENSE"]
 keywords = ["bioinformatics", "metagenomics", "nanopore", "nextflow"]
 classifiers = [
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 
-# Nextflow is a runtime requirement but is not a Python package; the conda
-# recipe declares it. A pip install must provide it separately.
 dependencies = [
     "flask>=3.0",
     "flask-socketio>=5.3",
     "pandas>=2.0",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
 [project.urls]
 Homepage = "https://github.com/dsamoht/timon"
+Issues = "https://github.com/dsamoht/timon/issues"
 
 [project.scripts]
 timon = "timon.cli:main"
@@ -35,3 +47,8 @@ path = "src/timon/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/timon"]
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

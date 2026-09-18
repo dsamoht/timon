@@ -1,0 +1,57 @@
+name: Release
+
+# A tag is the trigger, so what is published is always a commit that exists.
+# The version itself comes from src/timon/__init__.py; the tag only has to
+# agree with it, which the first job checks before anything is uploaded.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build and check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build twine
+      - name: Tag matches __version__
+        # A version can never be re-uploaded to PyPI, so a mismatch has to
+        # stop here rather than after the upload.
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          src=$(python -c "import re,pathlib; print(re.search(r'__version__ = \"(.+?)\"', pathlib.Path('src/timon/__init__.py').read_text()).group(1))")
+          [ "$tag" = "$src" ] || { echo "::error::tag $tag != __version__ $src"; exit 1; }
+      - run: python -m build
+      # The page only works if its stylesheet and templates ship.
+      - name: Wheel carries the page
+        run: |
+          listing=$(unzip -l dist/*.whl)
+          for f in timon/app/static/style/app.css timon/app/templates/index.html; do
+            grep -q "$f" <<<"$listing" || { echo "::error::$f is missing from the wheel"; exit 1; }
+          done
+      # Catches a README that PyPI would reject or render wrong.
+      - run: twine check --strict dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # trusted publishing — no API token is stored anywhere
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

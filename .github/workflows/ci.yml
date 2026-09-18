@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same ref makes the older run's answer irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: pytest (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both systems, because model/live.py asks the OS about processes
+        # (ps -o lstart=, process groups) and the two answer differently.
+        # Both ends of requires-python.
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]"
+      # Model-only: no nextflow, no container engine, no network.
+      - run: pytest
+
+  package:
+    name: wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build
+      - run: python -m build
+      # The page only works if its stylesheet and templates ship, and an
+      # editable install cannot tell whether they do.
+      - name: Wheel carries the page
+        run: |
+          listing=$(unzip -l dist/*.whl)
+          for f in timon/app/static/style/app.css timon/app/templates/index.html; do
+            grep -q "$f" <<<"$listing" || { echo "::error::$f is missing from the wheel"; exit 1; }
+          done
+      - name: Wheel installs and starts
+        run: |
+          python -m venv /tmp/wheel-env
+          /tmp/wheel-env/bin/pip install dist/*.whl
+          cd /tmp
+          /tmp/wheel-env/bin/python -c "import timon, timon.app"
+          /tmp/wheel-env/bin/timon --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  styles:
+    name: stylesheet is built from source
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Committed stylesheet matches styles/app.css
+        # The output is minified onto one line, so a plain diff prints the
+        # whole stylesheet twice; one rule per line shows only what changed.
+        run: |
+          css=src/timon/app/static/style/app.css
+          git diff --quiet "$css" && exit 0
+          diff <(git show "HEAD:$css" | tr '}' '\n') <(tr '}' '\n' < "$css") || true
+          echo "::error file=$css::stale — run 'npm run build' and commit the result"
+          exit 1
