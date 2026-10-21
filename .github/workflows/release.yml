@@ -12,6 +12,14 @@ permissions:
   contents: read
 
 jobs:
+  # The whole of CI, on the tagged commit. A version can never be re-uploaded
+  # to PyPI, so a release of a commit whose tests fail is one that cannot be
+  # taken back — it has to be stopped before the upload rather than noticed
+  # after it.
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
   build:
     name: build and check
     runs-on: ubuntu-latest
@@ -49,7 +57,7 @@ jobs:
 
   publish:
     name: publish to PyPI
-    needs: build
+    needs: [ci, build]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
