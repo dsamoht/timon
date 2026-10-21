@@ -5,6 +5,8 @@ on:
     branches: [main, dev]
   pull_request:
   workflow_dispatch:
+  # Called by release.yml, so a tag is only published once this passes on it.
+  workflow_call:
 
 # A newer push to the same ref makes the older run's answer irrelevant.
 concurrency:
@@ -28,6 +30,8 @@ jobs:
         python: ["3.10", "3.13"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # hatch-vcs reads the version off the tag
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
@@ -42,6 +46,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # hatch-vcs reads the version off the tag
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -64,7 +70,9 @@ jobs:
           /tmp/wheel-env/bin/timon --help
       - uses: actions/upload-artifact@v4
         with:
-          name: dist
+          # Not "dist": called from release.yml this runs in the release's own
+          # workflow run, where that name is the release build's.
+          name: ci-dist
           path: dist/
           retention-days: 7
 

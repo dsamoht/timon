@@ -2,6 +2,7 @@
 
 import pytest
 
+from conftest import write_fastq
 from timon.app.model import validation
 
 
@@ -115,6 +116,15 @@ def test_a_missing_database_is_not_a_mistake_in_the_form():
 
 # ── the sample sheet ─────────────────────────────────────────────────────────
 
+def roshab_row(**cells):
+    return {"sample_id": "s1", "group": "g", "info": "lake", "date": "2026-01-01",
+            "reads": "", **cells}
+
+
+def magont_row(**cells):
+    return {"sample_id": "s1", "group": "g", "assembly_fasta": "", "long_reads": "",
+            "short_reads_1": "", "short_reads_2": "", **cells}
+
 def test_an_empty_sheet_is_refused(roshab):
     assert validation.validate_samples([], roshab) == [
         "sample sheet is empty — add at least one sample"]
@@ -152,11 +162,111 @@ def test_a_missing_read_file_is_refused(roshab):
     assert any("path not found" in e for e in errors)
 
 
-def test_a_wildcard_is_left_to_nextflow_to_resolve(roshab):
-    """There is nothing on disk to look for, so it must not be looked for."""
+@pytest.mark.parametrize("value", ["imports/reads_*.fastq.gz", "imports/r?.fq",
+                                   "imports/{a,b}.fastq.gz"])
+def test_a_wildcard_is_refused(roshab, value):
+    """nf-schema expands it into a list and turns the run away: a path column
+    is never a file path pattern at either pinned revision."""
+    errors = validation.validate_samples([roshab_row(reads=value)], roshab)
+    assert any("is a pattern" in e for e in errors)
+
+
+def test_a_folder_of_reads_is_what_roshab_takes(roshab, reads):
+    folder = reads("imports/barcode01/a_0.fastq.gz").parent
+    reads("imports/barcode01/a_1.fastq.gz")
+    assert validation.validate_samples([roshab_row(reads=str(folder))], roshab) == []
+
+
+def test_a_folder_is_judged_by_its_reads_at_any_depth(roshab, reads):
+    """concatenate_reads.py gathers a folder by rglob."""
+    folder = reads("imports/run/pass/barcode01/a_0.fastq.gz").parents[2]
+    assert validation.validate_samples([roshab_row(reads=str(folder))], roshab) == []
+
+
+def test_a_folder_with_no_reads_in_it_is_refused(roshab, workspace):
+    (workspace / "imports/notes").mkdir(parents=True)
+    (workspace / "imports/notes/readme.txt").write_text("x")
+    errors = validation.validate_samples([roshab_row(reads="imports/notes")], roshab)
+    assert any("holds no file the pipeline would read" in e for e in errors)
+
+
+def test_a_folder_of_only_empty_reads_is_refused(roshab, workspace):
+    (workspace / "imports/b2").mkdir(parents=True)
+    write_fastq(workspace / "imports/b2/a_0.fastq.gz", reads=0)
+    errors = validation.validate_samples([roshab_row(reads="imports/b2")], roshab)
+    assert any("only empty" in e for e in errors)
+
+
+def test_an_empty_read_file_is_refused(roshab, workspace):
+    (workspace / "imports").mkdir()
+    write_fastq(workspace / "imports/a.fastq.gz", reads=0)
+    errors = validation.validate_samples([roshab_row(reads="imports/a.fastq.gz")], roshab)
+    assert "row 1 · 'reads': 'imports/a.fastq.gz' is empty" in errors
+
+
+def test_a_file_that_is_not_fastq_is_refused(roshab, workspace):
+    (workspace / "imports").mkdir()
+    (workspace / "imports/a.fasta").write_text(">c\nACGT\n")
+    errors = validation.validate_samples([roshab_row(reads="imports/a.fasta")], roshab)
+    assert any("expected a FastQ file" in e for e in errors)
+
+
+def test_a_file_named_gz_that_is_not_gzip_is_refused(magont, workspace):
+    (workspace / "imports").mkdir()
+    (workspace / "imports/a.fastq.gz").write_text("@r\nACGT\n+\nIIII\n")
+    errors = validation.validate_samples([magont_row(long_reads="imports/a.fastq.gz")], magont)
+    assert any("not gzip-compressed" in e for e in errors)
+
+
+def test_a_path_with_a_space_is_refused(roshab, reads):
+    path = reads("imports/my reads/a.fastq.gz")
+    errors = validation.validate_samples([roshab_row(reads=str(path))], roshab)
+    assert any("no spaces in the path" in e for e in errors)
+
+
+def test_mag_ont_takes_one_gzipped_file_and_not_a_folder(magont, reads):
+    folder = reads("imports/barcode01/a_0.fastq.gz").parent
+    errors = validation.validate_samples([magont_row(long_reads=str(folder))], magont)
+    assert any("is a folder" in e for e in errors)
+
+
+def test_mag_ont_refuses_plain_fastq(magont, reads):
+    path = reads("imports/a.fastq")
+    errors = validation.validate_samples([magont_row(long_reads=str(path))], magont)
+    assert any("one gzipped FastQ file" in e for e in errors)
+
+
+def test_a_list_of_files_is_told_to_be_concatenated(magont, reads):
+    a, b = reads("imports/a_0.fastq.gz"), reads("imports/a_1.fastq.gz")
+    errors = validation.validate_samples([magont_row(long_reads=f"{a},{b}")], magont)
+    assert any("concatenate them into one file first" in e for e in errors)
+
+
+def test_short_reads_come_in_pairs(magont, reads):
+    r1 = reads("imports/s_R1.fastq.gz")
+    errors = validation.validate_samples(
+        [magont_row(long_reads=str(reads("imports/a.fastq.gz")), short_reads_1=str(r1))], magont)
+    assert any("go together" in e for e in errors)
+
+
+def test_an_assembly_has_to_be_fasta(magont, reads):
+    path = reads("imports/a.fastq.gz")
+    errors = validation.validate_samples([magont_row(assembly_fasta=str(path))], magont)
+    assert any("one FASTA file" in e for e in errors)
+
+
+def test_mag_ont_takes_the_sample_names_its_own_schema_takes(magont, reads):
+    """'^\\S+$' there — stricter would refuse a sheet the pipeline accepts."""
+    path = reads("imports/a.fastq.gz")
     assert validation.validate_samples(
-        [{"sample_id": "s1", "group": "g", "info": "lake", "date": "2026-01-01",
-          "reads": "/nowhere/reads_*.fastq.gz"}], roshab) == []
+        [magont_row(sample_id="_lake.A", long_reads=str(path))], magont) == []
+
+
+def test_a_label_with_a_space_is_refused(roshab, reads):
+    path = reads("imports/a.fastq.gz")
+    errors = validation.validate_samples(
+        [roshab_row(info="lake shore", reads=str(path))], roshab)
+    assert any("'info'" in e and "no spaces" in e for e in errors)
 
 
 def test_a_date_column_wants_an_unambiguous_date(roshab, reads):
@@ -190,7 +300,7 @@ def test_a_sample_id_must_start_with_a_letter_or_a_digit(roshab, reads, sample_i
     errors = validation.validate_samples(
         [{"sample_id": sample_id, "group": "g", "info": "lake", "date": "2026-01-01",
           "reads": str(path)}], roshab)
-    assert any("must start with a letter or digit" in e for e in errors)
+    assert any("starting with a letter or digit" in e for e in errors)
 
 
 def test_a_sample_id_may_still_carry_dots_hyphens_and_underscores_after_that(roshab, reads):

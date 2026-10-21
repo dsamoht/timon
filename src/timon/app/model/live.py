@@ -77,6 +77,10 @@ class Live:
     # registered. Held so that a pid handed out again later cannot be
     # mistaken for this run.
     proc_start: str = ""
+    # Where in the log this attempt begins. The log is appended to by every
+    # attempt on a folder, so a console that replayed from "a little way
+    # back" would open a restart on the failure it was started to fix.
+    log_start: int = 0
 
     @property
     def is_test(self) -> bool:
@@ -363,9 +367,11 @@ class Tail:
 
     CHUNK = 64 * 1024
 
-    def __init__(self, path, replay: int = REPLAY_BYTES):
+    def __init__(self, path, replay: int = REPLAY_BYTES, start: int = 0):
         self.path = str(path)
         self._replay = replay
+        # Nothing before this offset belongs to the attempt being read.
+        self._from = max(0, int(start or 0))
         self._decoder = codecs.getincrementaldecoder("utf-8")("replace")
 
     def chunks(self, alive_now: Callable[[], bool],
@@ -384,9 +390,12 @@ class Tail:
             return
         with handle:
             handle.seek(0, os.SEEK_END)
-            start = max(0, handle.tell() - self._replay)
+            end = handle.tell()
+            # A log cut short by hand is read whole rather than past its end.
+            floor = self._from if self._from <= end else 0
+            start = max(floor, end - self._replay)
             handle.seek(start)
-            if start:
+            if start > floor:
                 # Start at a line of its own. Coming in at an arbitrary byte
                 # would open the console on half a word, and worse, on half
                 # an escape sequence — which is printed rather than obeyed.

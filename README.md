@@ -1,5 +1,5 @@
 # timon
-<img src="https://raw.githubusercontent.com/dsamoht/timon/refs/heads/dev/src/timon/app/static/img/wheel1.svg?token=GHSAT0AAAAAAEFLO53Y7Z6CMFPIFY3JALS22VNJ6FQ" alt="A ship's wheel" height="120">
+<img src="src/timon/app/static/img/wheel1.svg" alt="A ship's wheel" height="120">
 
 **t**oolkit of **i**ntegrated **m**icrobi**o**me analysis with support for lo**n**g reads.
 
@@ -30,7 +30,7 @@ $ conda env create -f environment.yaml
 ## Usage
 ```console
 $ timon
-timon 0.1.0 → http://127.0.0.1:54123   (Ctrl-C to quit)
+timon <version> → http://127.0.0.1:54123   (Ctrl-C to quit)
 ```
 The app will open at the specified adress.
 

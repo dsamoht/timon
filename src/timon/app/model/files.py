@@ -22,6 +22,8 @@ import os
 import re
 from pathlib import Path
 
+from .validation import column_rule
+
 # Captured at import — that is server start, before anything can chdir, and
 # is the same launch directory the input folder is resolved against.
 _ROOT = Path.cwd().resolve()
@@ -77,13 +79,15 @@ def workspace_root() -> Path:
     return _ROOT
 
 
-def path_columns(pipe: dict) -> list[str]:
-    """Sample-sheet columns that hold a path, so can be filled by browsing."""
+def path_columns(pipe: dict) -> dict[str, str]:
+    """Sample-sheet columns that hold a path, so can be filled by browsing,
+    each with what it names — "file", "dir" or "any" — so the browser can only
+    pick what the save would accept. Undeclared, a column takes one file."""
     cols = [c for c in pipe["columns"] if PATH_COLUMN_RE.search(c)]
     file_col = pipe.get("file_column")
     if file_col and file_col not in cols:
         cols.append(file_col)
-    return cols
+    return {c: column_rule(pipe, c).get("path", "file") for c in cols}
 
 
 def _inside(path: Path) -> bool:

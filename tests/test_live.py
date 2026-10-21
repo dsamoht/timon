@@ -214,3 +214,15 @@ def test_a_process_that_has_ended_but_not_been_collected_is_not_a_run(tmp_path):
 
 def test_a_log_that_is_not_there_reads_as_nothing(tmp_path):
     assert list(live.Tail(tmp_path / "gone.log").chunks(lambda: False)) == []
+
+
+def test_the_tail_starts_at_the_attempt_it_is_given(tmp_path):
+    """Every attempt on a folder appends to one log; the one being read is
+    the one that began at ``start``, not whatever came before it."""
+    log = tmp_path / live.LOG_NAME
+    log.write_bytes(b"ERROR ~ the attempt before\n")
+    start = log.stat().st_size
+    with open(log, "ab") as handle:
+        handle.write(b"this attempt\n")
+    out = "".join(live.Tail(log, start=start).chunks(lambda: False, poll=0, settle=0))
+    assert out == "this attempt\n"
