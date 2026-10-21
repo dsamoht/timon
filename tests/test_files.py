@@ -109,8 +109,14 @@ def test_a_file_is_not_a_folder_to_browse(rooted):
 # ── which columns get a browse button ────────────────────────────────────────
 
 def test_the_columns_holding_a_path_are_derived_from_their_names(magont):
-    assert files.path_columns(magont) == [
+    assert list(files.path_columns(magont)) == [
         "assembly_fasta", "long_reads", "short_reads_1", "short_reads_2"]
+
+
+def test_a_column_says_what_kind_of_path_it_takes(roshab, magont):
+    """So the browser can only pick what the save would accept."""
+    assert files.path_columns(roshab)["reads"] == "any"
+    assert set(files.path_columns(magont).values()) == {"file"}
 
 
 def test_the_file_column_always_gets_one(roshab):

@@ -595,8 +595,8 @@ class WorkflowRun:
         entry = self._launch(build_command(spec), spec,
                              out_dir=output_dir(spec),
                              exp_id=spec["exp_id"], kind=live.RUN)
-        self._record = history.started(spec, self.command,
-                                       pid=entry.pid, log=entry.log)
+        self._record = history.started(spec, self.command, pid=entry.pid,
+                                       log=entry.log, log_start=entry.log_start)
 
     def start_test(self, spec: dict) -> None:
         """Launch the pipeline's own test profile over this spec's workspace.
@@ -657,6 +657,8 @@ class WorkflowRun:
         # closed, and it would be killed by its own output the moment timon
         # quit.
         with open(log, "ab") as handle:
+            handle.seek(0, os.SEEK_END)
+            log_start = handle.tell()
             handle.write(live.banner(command))
             handle.flush()
             self._process = subprocess.Popen(
@@ -684,6 +686,7 @@ class WorkflowRun:
             kind=kind,
             started_at=time.time(),
             proc_start=live.process_start(self._process.pid),
+            log_start=log_start,
         ))
         return self._entry
 

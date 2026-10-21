@@ -80,6 +80,9 @@ class Run:
     # later one find the run still going and show what it is saying.
     pid: int = 0
     log: str = ""
+    # Where this attempt begins in that log, which earlier attempts on the
+    # same folder share (see live.Live.log_start).
+    log_start: int = 0
     status: str = RUNNING
     exit_code: int | None = None
     started_at: float = 0.0
@@ -107,7 +110,7 @@ def record_path(output_folder, exp_id: str) -> Path:
 # ── writing one ──────────────────────────────────────────────────────────────
 
 def started(spec: dict, command: list[str], pid: int = 0,
-            log: str = "") -> Run:
+            log: str = "", log_start: int = 0) -> Run:
     """Write down a run that has just been launched, and return the record.
 
     Called once nextflow is actually running: a configuration that could not
@@ -133,6 +136,7 @@ def started(spec: dict, command: list[str], pid: int = 0,
         command=list(command),
         pid=pid,
         log=log,
+        log_start=log_start,
         launch_dir=os.getcwd(),
         out_dir=os.path.join(spec["output_folder"], spec["exp_id"]),
         session=previous.session if previous else "",
@@ -235,6 +239,12 @@ def _settled(run: Run, active: str) -> Run:
     session = nfstate.session_id(run.launch_dir, run.out_dir) or run.session
     status = FROM_NEXTFLOW.get(nfstate.status_of(run.launch_dir, run.out_dir),
                                INTERRUPTED)
+    # Read again before writing: the timon that owns the run may have closed
+    # the record off in the meantime, with the exit code only it knows, and
+    # writing over that from the copy read above would lose it.
+    latest = _read(Path(run.out_dir) / RECORD_NAME)
+    if latest is not None and latest.status != RUNNING:
+        return latest
     return save(replace(run, status=status, session=session))
 
 

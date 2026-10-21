@@ -414,8 +414,13 @@ class Experiment:
         if self.pinned:
             return [dict(row) for row in self.samples]
         pipe = self.pipeline
+        # A folder is one value only to a pipeline that gathers one; to the
+        # rest, a chunked sample is a list the save says to concatenate.
+        kind = validation.column_rule(pipe, pipe["file_column"]).get("path")
+        found = detect_samples_files(folder or self.input_folder,
+                                     folders_ok=kind in ("dir", "any"))
         rows = []
-        for name, path in detect_samples_files(folder or self.input_folder).items():
+        for name, path in found.items():
             row = {c: "" for c in pipe["columns"]}
             row[pipe["columns"][0]] = name
             row[pipe["file_column"]] = path

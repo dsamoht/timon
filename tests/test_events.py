@@ -221,3 +221,78 @@ def test_stopping_a_run_ends_it_and_says_how_it_ended(console):
     assert experiment.in_flight() == []
     assert model.history.load(experiment.output_folder, experiment.exp_id).status \
         == model.history.CANCELLED
+
+
+# ── running one again ────────────────────────────────────────────────────────
+
+def test_running_again_shows_this_attempt_and_not_the_one_before(console, workspace,
+                                                                 monkeypatch):
+    """Every attempt on a folder appends to the same log, so a console that
+    replayed "a little way back" opened a restart on the failure it was
+    meant to fix — which reads exactly like the restart failing again."""
+    open_page, experiment = console
+    failing = workspace / "failing.py"
+    failing.write_text("print('ERROR ~ the first attempt', flush=True)\n"
+                       "raise SystemExit(1)\n")
+    monkeypatch.setattr(nextflow, "build_command",
+                        lambda _: [sys.executable, str(failing)])
+    page = open_page()
+    start(page)
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        _, states = collect(page, 1.0)
+        if states and states[-1]["running"] is False:
+            break
+    assert model.history.load(experiment.output_folder, experiment.exp_id).status \
+        == model.history.FAILED
+
+    fixed = workspace / "fixed.py"
+    fixed.write_text("print('the second attempt', flush=True)\n")
+    monkeypatch.setattr(nextflow, "build_command",
+                        lambda _: [sys.executable, str(fixed)])
+    start(page)
+    text, _ = collect(page, 6.0)
+    assert "the second attempt" in text
+    assert "the first attempt" not in text
+
+    # And reopened afterwards, the run's last words are this attempt's.
+    experiment.restore(model.history.load(experiment.output_folder, experiment.exp_id))
+    other = open_page()
+    other.emit("attach", {})
+    replay = wait_for(other, "replay")
+    assert "the second attempt" in replay["data"]
+    assert "the first attempt" not in replay["data"]
+
+
+def test_running_again_straight_away_is_still_watched_to_the_end(console, workspace,
+                                                                 monkeypatch):
+    """Pressed while the watcher of the attempt before is still winding down.
+
+    Both attempts write the same folder, so a page counted as already watching
+    it was left with that old watcher — which ends with the old process, and
+    took the new run's console with it the first time the run went quiet.
+    """
+    open_page, experiment = console
+    failing = workspace / "failing.py"
+    failing.write_text("raise SystemExit(1)\n")
+    monkeypatch.setattr(nextflow, "build_command",
+                        lambda _: [sys.executable, str(failing)])
+    page = open_page()
+    start(page)
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        _, states = collect(page, 0.2)
+        if states and states[-1]["running"] is False:
+            break
+
+    quiet = workspace / "quiet.py"
+    quiet.write_text("import time\n"
+                     "print('before the pause', flush=True)\n"
+                     "time.sleep(4)\n"
+                     "print('after the pause', flush=True)\n"
+                     "time.sleep(2)\n")
+    monkeypatch.setattr(nextflow, "build_command",
+                        lambda _: [sys.executable, str(quiet)])
+    start(page)
+    text, _ = collect(page, 9.0)
+    assert "after the pause" in text

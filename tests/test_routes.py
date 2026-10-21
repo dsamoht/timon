@@ -9,6 +9,7 @@ import re
 
 import pytest
 
+from conftest import write_fastq
 from timon.app import model
 from timon.app.model.experiment import Experiment
 
@@ -279,7 +280,7 @@ def recorded(client, workspace, installed):
     from timon.app.model import params as P
 
     reads = workspace / "sample.fastq"
-    reads.write_text("")
+    write_fastq(reads)
     experiment = client.experiment
     installed()
     values = P.param_defaults(experiment.pipeline)

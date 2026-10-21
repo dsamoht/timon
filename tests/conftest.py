@@ -10,6 +10,7 @@ the checkout.
 Both are handled below, which is why no test needs to know about either.
 """
 
+import gzip
 import sys
 from pathlib import Path
 
@@ -121,17 +122,22 @@ def magont():
     return PIPELINES["mag-ont"]
 
 
+def write_fastq(path, reads: int = 1) -> None:
+    """A FastQ of that many reads; none is the empty one a dead barcode holds."""
+    text = "".join(f"@r{i}\nACGT\n+\nIIII\n" for i in range(reads)).encode()
+    opener = gzip.open if str(path).endswith(".gz") else open
+    with opener(path, "wb") as handle:
+        handle.write(text)
+
+
 @pytest.fixture
 def reads(workspace):
-    """A factory for empty read files, for the checks that only want a path.
-
-    Validation asks whether the path exists, never what is in it, so a real
-    fastq would only make the tests slower to read.
-    """
+    """A factory for read files holding one read, gzipped where the name
+    says so — the least a save accepts, since an empty FastQ is refused."""
     def make(relative: str) -> Path:
         path = workspace / relative
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("")
+        write_fastq(path)
         return path
     return make
 
