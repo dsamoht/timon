@@ -21,13 +21,13 @@ from .nextflow import (RUN, Container, Engine, Outcome, WorkflowError,
                        WorkflowRun, can_resume, container, engine, output_dir,
                        stop)
 from .results import OutsideResults
-from .samples import convert_realpaths_to_wildcards, detect_samples_files
+from .samples import detect_samples_files
 
 __all__ = [
     "ACCESS", "EXPERIMENT", "Container", "DownloadError", "Engine",
     "Experiment", "Live", "Outcome", "OutsideResults", "PermissionRequired",
     "PINNED", "RUN", "RunUnavailable", "Tail", "WorkflowError",
-    "WorkflowRun", "can_resume", "container", "convert_realpaths_to_wildcards",
+    "WorkflowRun", "can_resume", "container",
     "detect_samples_files", "downloads", "engine",
     "history", "listing", "live", "nfstate", "output_dir", "params",
     "path_columns", "resolve", "results", "selectable_pipelines", "stop",

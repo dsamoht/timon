@@ -93,6 +93,40 @@ def test_a_column_is_never_both_always_required_and_only_sometimes(pipe):
         assert not required & set(group)
 
 
+def test_paired_columns_are_columns(pipe):
+    for group in pipe.get("paired_columns") or []:
+        assert len(group) > 1 and set(group) <= set(pipe["columns"])
+
+
+RULE_KEYS = {"pattern", "accepts", "path", "name", "nonempty"}
+
+
+def test_a_column_rule_is_for_a_column_and_knows_its_keys(pipe):
+    for col, rule in (pipe.get("column_rules") or {}).items():
+        assert col in pipe["columns"], col
+        assert set(rule) <= RULE_KEYS, (col, set(rule) - RULE_KEYS)
+
+
+def test_a_column_rule_can_be_carried_out(pipe):
+    for col, rule in (pipe.get("column_rules") or {}).items():
+        for key in ("pattern", "name"):
+            if key in rule:
+                re.compile(rule[key])
+        assert rule.get("path", "file") in ("file", "dir", "any"), col
+        # Contents and file names are only things a path has.
+        if "name" in rule or rule.get("nonempty"):
+            assert "path" in rule, col
+        # A refusal that cannot say what would have been taken is no help.
+        if "pattern" in rule or "path" in rule:
+            assert rule.get("accepts"), col
+
+
+def test_a_declared_file_column_names_a_path(pipe):
+    rules = pipe.get("column_rules")
+    if rules:
+        assert "path" in rules.get(pipe["file_column"], {})
+
+
 # ── the databases ────────────────────────────────────────────────────────────
 
 def test_a_database_a_pipeline_reads_is_one_timon_can_find(pipe):

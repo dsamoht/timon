@@ -14,13 +14,9 @@ import re
 from collections import Counter
 
 from .params import parse_number, required_trigger
+from .samples import Unreadable, files_under, holds_data
 
 EXP_ID_RE    = re.compile(r'^[A-Za-z0-9_\-]+$')
-# roshab-cli's own rule (assets/schema_input.json from v0.1.0): a leading dot,
-# hyphen or underscore is refused there, and a sheet timon accepted would
-# otherwise be turned away by the pipeline after the run had started.
-SAMPLE_ID_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*$')
-DATE_RE      = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
 
 def validate_configuration(pipe: dict, exp_id: str, values: dict,
@@ -128,13 +124,19 @@ def required_columns(pipe: dict) -> list[str]:
     return list(declared) if declared is not None else list(pipe["columns"])
 
 
+def column_rule(pipe: dict, column: str) -> dict:
+    """What one sample-sheet column accepts; empty where nothing is declared."""
+    return (pipe.get("column_rules") or {}).get(column, {})
+
+
 def validate_samples(rows: list[dict], pipe: dict) -> list[str]:
-    """Check a sample sheet, row by row, against the pipeline's columns."""
+    """Check a sample sheet, cell by cell, against what the pipeline accepts."""
     errors: list[str] = []
     columns = pipe["columns"]
     required = required_columns(pipe)
     # Groups of columns of which a row needs at least one — a schema's "anyOf".
     either = pipe.get("one_of_columns") or []
+    paired = pipe.get("paired_columns") or []
     file_column = pipe.get("file_column")
 
     if not rows:
@@ -152,25 +154,22 @@ def validate_samples(rows: list[dict], pipe: dict) -> list[str]:
                 named = " or ".join(f"'{col}'" for col in group)
                 errors.append(f"{row_label} · one of {named} is required")
 
-        if file_column and file_column in row:
-            path = str(row[file_column]).strip()
-            # A wildcard stands for files that are only resolved by nextflow,
-            # so there is nothing here to look for on disk.
-            if path and "*" not in path and not os.path.exists(path):
-                errors.append(f"{row_label} · '{file_column}': path not found — {path!r}")
+        for group in paired:
+            filled = [col for col in group if str(row.get(col, "")).strip()]
+            if filled and len(filled) < len(group):
+                named = " and ".join(f"'{col}'" for col in group)
+                errors.append(f"{row_label} · {named} go together: fill all of them or none")
 
-        if "date" in columns and "date" in row:
-            raw_date = str(row["date"]).strip()
-            if raw_date and not DATE_RE.match(raw_date):
-                errors.append(f"{row_label} · 'date': expected YYYY-MM-DD (got {raw_date!r})")
-
-        if "sample_id" in columns and "sample_id" in row:
-            sid = str(row["sample_id"]).strip()
-            if sid and not SAMPLE_ID_RE.match(sid):
-                errors.append(
-                    f"{row_label} · 'sample_id': must start with a letter or digit, "
-                    "then only letters, digits, hyphens, dots and underscores"
-                )
+        for col in columns:
+            value = str(row.get(col, "")).strip()
+            if not value:
+                continue
+            rule = column_rule(pipe, col)
+            if not rule and col == file_column:
+                # Nothing declared for this pipeline: whether it exists is the
+                # one thing that can be said without knowing what it takes.
+                rule = {"path": "any"}
+            errors.extend(f"{row_label} · '{col}': {e}" for e in _cell_errors(value, rule))
 
     counts = Counter(str(r.get("sample_id", "")).strip() for r in rows)
     for sid, n in counts.items():
@@ -178,3 +177,70 @@ def validate_samples(rows: list[dict], pipe: dict) -> list[str]:
             errors.append(f"duplicate sample_id: {sid!r}")
 
     return errors
+
+
+# Nextflow's glob, which file() expands into a list and nf-schema then refuses.
+_GLOB_RE = re.compile(r"[*?\[{]")
+
+
+def _cell_errors(value: str, rule: dict) -> list[str]:
+    """One filled cell against its rule: the reasons it would be turned away.
+
+    Stops at the first, since each check stands on the one before it — a path
+    that does not exist has no contents to judge.
+    """
+    shown = value if len(value) <= 80 else "…" + value[-79:]
+    expected = f" — expected {rule['accepts']}" if rule.get("accepts") else ""
+    kind = rule.get("path")
+
+    if kind and _GLOB_RE.search(value):
+        return [f"{shown!r} is a pattern, which the pipeline does not expand{expected}"]
+    if kind and "," in value and not os.path.exists(value):
+        how = (" — or give the folder that holds them" if kind in ("dir", "any") else
+               " — concatenate them into one file first")
+        return [f"{shown!r} is a list of paths, and a row takes one{how}"]
+    # The wrong kind of path is said before the pattern, which a folder fails
+    # too — "is a folder" says what to do about it.
+    if kind == "file" and os.path.isdir(value):
+        return [f"{shown!r} is a folder{expected}"]
+    if kind == "dir" and os.path.isfile(value):
+        return [f"{shown!r} is not a folder{expected}"]
+    if rule.get("pattern") and not re.search(rule["pattern"], value):
+        return [f"{shown!r} is not accepted{expected}"]
+    if not kind:
+        return []
+    if not os.path.exists(value):
+        return [f"path not found — {shown!r}"]
+
+    name = re.compile(rule["name"]) if rule.get("name") else None
+    if os.path.isdir(value):
+        return _folder_errors(value, shown, name, rule.get("nonempty"), expected)
+    if name and not name.search(os.path.basename(value)):
+        return [f"{shown!r} is not accepted{expected}"]
+    if rule.get("nonempty"):
+        try:
+            if not holds_data(value):
+                return [f"{shown!r} is empty"]
+        except Unreadable as exc:
+            return [f"{shown!r} {exc}"]
+    return []
+
+
+def _folder_errors(folder: str, shown: str, name, nonempty: bool,
+                   expected: str) -> list[str]:
+    """A folder is as good as the files a pipeline would gather from it."""
+    found = False
+    for path in files_under(folder, name):
+        found = True
+        if not nonempty:
+            return []
+        try:
+            if holds_data(path):
+                return []
+        except Unreadable:
+            # One bad chunk among good ones is the pipeline's to report; a
+            # folder with nothing else in it is caught below.
+            continue
+    if not found:
+        return [f"{shown!r} holds no file the pipeline would read{expected}"]
+    return [f"{shown!r} holds only empty or unreadable files"]
