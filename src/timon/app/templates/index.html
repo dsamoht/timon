@@ -2048,6 +2048,8 @@
             unlockApp(state.ended);
             setRunReady(!!state.can_start);
             setCanTest(!!state.can_test);
+            applyRestart(state.restart);
+            applyPinned(state.pinned, state.restart);
         }
         // A run that has just ended has finished writing, and one that has
         // just started has begun: either way what these two views are
@@ -2322,6 +2324,7 @@
             .then(data => {
                 if (!data.ok) { toast('could not unlock the run', 'err'); return; }
                 applyPinned(false);
+                applyRestart(data.restart);
                 // No longer held at the revision it ran at, so it launches at
                 // today's pin — and the status strip has to say so.
                 document.getElementById('pipe-rev').textContent = data.revision || '';

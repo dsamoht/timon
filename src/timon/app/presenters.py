@@ -588,6 +588,12 @@ def run_state_view(experiment: model.Experiment, engine: model.Engine,
                       and container.ready and entry is None),
         "can_test":  (experiment.is_testable() and engine.found
                       and container.ready and entry is None),
+        # What pressing run again would do, and to which attempt. The end of
+        # a run is when both change — it now has a session to continue and a
+        # new way it ended — and a page told only that it may start would go
+        # on describing the attempt before.
+        "restart":   restart_view(experiment),
+        "pinned":    experiment.pinned,
     }
 
 

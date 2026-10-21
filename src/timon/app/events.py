@@ -35,8 +35,16 @@ LIVENESS_EVERY = 3.0
 # The model reports an Outcome; the wording for it is here, next to the rest
 # of the console's voice.
 # Which run each page is being sent, by socket id. Only ever consulted to
-# avoid starting a second watcher for a page that already has one.
-WATCHING: dict[str, str] = {}
+# avoid starting a second watcher for a page that already has one. Keyed by
+# the attempt rather than the folder: running again reuses the folder, and a
+# watcher still winding down the attempt before must not be taken for one
+# watching this attempt — it would end with the old process and leave the
+# new run with nothing reaching the console.
+WATCHING: dict[str, tuple] = {}
+
+
+def _attempt(entry) -> tuple:
+    return (entry.out_dir, entry.pid, entry.started_at)
 
 STOPPING_LINE  = "\n[Stopping the workflow — waiting for nextflow to take its tasks down]\n"
 CANCELLED_LINE = "[Workflow stopped]\n"
@@ -121,7 +129,7 @@ def _watch(sid: str, entry) -> None:
         return was_alive
 
     try:
-        for chunk in model.Tail(entry.log).chunks(alive_now):
+        for chunk in model.Tail(entry.log, start=entry.log_start).chunks(alive_now):
             socketio.emit("workflow_output", {"data": chunk}, to=sid)
     except Exception as exc:
         socketio.emit("workflow_output",
@@ -129,7 +137,7 @@ def _watch(sid: str, entry) -> None:
     # The run this page was watching is over. What it is over *as* comes from
     # the record, which the run that ended wrote — or which was corrected on
     # the way in here, if the timon that started it is gone.
-    if WATCHING.get(sid) == entry.out_dir:
+    if WATCHING.get(sid) == _attempt(entry):
         del WATCHING[sid]
     socketio.emit("run_state", _state(_target(), over=entry), to=sid)
 
@@ -143,9 +151,9 @@ def _attach(sid: str, entry) -> None:
     run somebody else started. Two watchers on one page would print every
     line of the run twice.
     """
-    if WATCHING.get(sid) == entry.out_dir:
+    if WATCHING.get(sid) == _attempt(entry):
         return
-    WATCHING[sid] = entry.out_dir
+    WATCHING[sid] = _attempt(entry)
     socketio.start_background_task(_watch, sid, entry)
 
 
@@ -179,7 +187,8 @@ def _replay() -> None:
     record = model.EXPERIMENT.previous()
     if record is None or not record.ended or not record.log:
         return
-    text = "".join(model.Tail(record.log).chunks(lambda: False, poll=0, settle=0))
+    text = "".join(model.Tail(record.log, start=record.log_start)
+                   .chunks(lambda: False, poll=0, settle=0))
     emit("replay", presenters.replay_view(record, text))
 
 
