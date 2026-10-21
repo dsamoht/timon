@@ -325,13 +325,19 @@
        block at the end of the workspace: it has to stay visible at every
        scroll position, and rather than position: fixed so it cannot end up
        sitting on top of the workspace's last row on a short viewport.  */
+    /* Three columns so the copyright stays centred on the page whatever
+       the credit beside it measures. A phone has no room for a centre and
+       two sides, so there the two simply go to either edge.            */
     .footer {
-        @apply col-span-2 row-start-3 z-30 flex shrink-0 items-center
-               justify-center border-t border-edge-soft bg-surface px-6
+        @apply col-span-2 row-start-3 z-30 grid shrink-0 grid-cols-[1fr_auto_1fr]
+               items-center gap-4 border-t border-edge-soft bg-surface px-6
                font-mono text-[10px] leading-none text-ink-mid
-               max-tablet:col-span-1 max-compact:px-3;
+               max-tablet:col-span-1 max-compact:flex max-compact:justify-between
+               max-compact:px-3;
         height: var(--footer-h);
     }
+    .footer > :first-child { @apply col-start-2; }
+    .footer-credit { @apply col-start-3 justify-self-end truncate; }
 
     /* ── sidebar ────────────────────────────────────────────────────
        Below the tablet tier it becomes a slide-in drawer. The open state
