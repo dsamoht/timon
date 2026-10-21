@@ -2,39 +2,78 @@
 
 A scan is a suggestion the user then corrects, so what matters here is that
 it groups the way a sequencer lays files out — a barcode directory is one
-sample, chunked files are one sample — and never invents a path that does not
-resolve.
+sample, chunked files are one sample — that what it suggests is a value the
+pipeline would take, and that it never invents a path that does not resolve.
 """
 
 import os
 
-from timon.app.model.samples import convert_realpaths_to_wildcards, detect_samples_files
+import pytest
+
+from conftest import write_fastq
+from timon.app.model.samples import (Unreadable, detect_samples_files, holds_data,
+                                     sample_value)
 
 
-def make(root, *relative):
+def make(root, *relative, reads=1):
     for name in relative:
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("")
+        write_fastq(path, reads)
     return root
 
 
-# ── collapsing several files into one value ──────────────────────────────────
+# ── what is in a read file ───────────────────────────────────────────────────
+
+def test_a_gzipped_fastq_with_no_reads_is_empty_though_it_has_bytes(tmp_path):
+    make(tmp_path, "empty.fastq.gz", reads=0)
+    assert (tmp_path / "empty.fastq.gz").stat().st_size > 0
+    assert not holds_data(str(tmp_path / "empty.fastq.gz"))
+
+
+def test_a_fastq_with_a_read_holds_data(tmp_path):
+    make(tmp_path, "a.fastq.gz", "b.fastq")
+    assert holds_data(str(tmp_path / "a.fastq.gz"))
+    assert holds_data(str(tmp_path / "b.fastq"))
+
+
+def test_a_file_named_gz_that_is_not_gzip_is_unreadable(tmp_path):
+    (tmp_path / "a.fastq.gz").write_text("@r\nACGT\n+\nIIII\n")
+    with pytest.raises(Unreadable, match="not gzip"):
+        holds_data(str(tmp_path / "a.fastq.gz"))
+
+
+# ── one value for a sample's files ───────────────────────────────────────────
 
 def test_one_file_is_left_alone():
-    assert convert_realpaths_to_wildcards(["/d/a.fastq.gz"]) == "/d/a.fastq.gz"
+    assert sample_value(["/d/a.fastq.gz"], folders_ok=True) == "/d/a.fastq.gz"
 
 
-def test_files_in_one_directory_collapse_to_a_wildcard():
-    value = convert_realpaths_to_wildcards(
-        ["/d/run_01.fastq.gz", "/d/run_02.fastq.gz"])
-    assert value == "/d/run_0*.fastq.gz"
+def test_files_alone_in_their_folder_are_named_by_the_folder(tmp_path):
+    make(tmp_path, "s/run_01.fastq.gz", "s/run_02.fastq.gz")
+    paths = sorted(str(p) for p in (tmp_path / "s").iterdir())
+    assert sample_value(paths, folders_ok=True) == str(tmp_path / "s")
 
 
-def test_files_across_directories_cannot_be_wildcarded():
-    """A comma-separated list is what is left; a wildcard would miss one."""
-    value = convert_realpaths_to_wildcards(["/a/x.fastq.gz", "/b/y.fastq.gz"])
-    assert value == "/a/x.fastq.gz,/b/y.fastq.gz"
+def test_a_folder_shared_with_another_sample_does_not_stand_for_one(tmp_path):
+    """The pipeline would read the other sample's reads too."""
+    make(tmp_path, "s/a_1.fastq.gz", "s/a_2.fastq.gz", "s/b.fastq.gz")
+    paths = [str(tmp_path / "s/a_1.fastq.gz"), str(tmp_path / "s/a_2.fastq.gz")]
+    assert sample_value(paths, folders_ok=True) == ",".join(paths)
+
+
+def test_a_pipeline_taking_one_file_is_given_the_list(tmp_path):
+    """Which the save then explains: there is no one path to give it."""
+    make(tmp_path, "s/run_01.fastq.gz", "s/run_02.fastq.gz")
+    paths = sorted(str(p) for p in (tmp_path / "s").iterdir())
+    assert sample_value(paths, folders_ok=False) == ",".join(paths)
+
+
+def test_a_value_is_never_a_wildcard(tmp_path):
+    make(tmp_path, "s/run_01.fastq.gz", "s/run_02.fastq.gz", "s/other.fastq.gz")
+    paths = [str(tmp_path / "s/run_01.fastq.gz"), str(tmp_path / "s/run_02.fastq.gz")]
+    for folders_ok in (True, False):
+        assert "*" not in sample_value(paths, folders_ok)
 
 
 # ── the scan ─────────────────────────────────────────────────────────────────
@@ -43,14 +82,36 @@ def test_a_missing_input_folder_is_not_an_error(tmp_path):
     assert detect_samples_files(str(tmp_path / "absent")) == {}
 
 
-def test_a_barcode_directory_is_one_sample(tmp_path):
+def test_a_barcode_directory_is_one_sample_named_by_its_folder(tmp_path):
     make(tmp_path, "barcode01/FAX123_pass_barcode01_0.fastq.gz",
                    "barcode01/FAX123_pass_barcode01_1.fastq.gz")
     found = detect_samples_files(str(tmp_path))
     assert len(found) == 1
     (name, value), = found.items()
     assert "barcode01" in name
-    assert "*" in value
+    assert value == str(tmp_path / "barcode01")
+
+
+def test_a_barcode_with_only_empty_reads_is_ignored(tmp_path):
+    """What MinKNOW leaves for a barcode nothing was read into."""
+    make(tmp_path, "barcode01/a_0.fastq.gz")
+    make(tmp_path, "barcode02/b_0.fastq.gz", "barcode02/b_1.fastq.gz", reads=0)
+    found = detect_samples_files(str(tmp_path))
+    assert len(found) == 1
+    assert "barcode02" not in " ".join(found.values())
+
+
+def test_an_empty_chunk_beside_good_ones_does_not_lose_the_sample(tmp_path):
+    make(tmp_path, "barcode01/a_0.fastq.gz", "barcode01/a_1.fastq.gz")
+    make(tmp_path, "barcode01/a_2.fastq.gz", reads=0)
+    (value,) = detect_samples_files(str(tmp_path)).values()
+    assert value == str(tmp_path / "barcode01")
+
+
+def test_an_empty_file_is_not_a_sample(tmp_path):
+    make(tmp_path, "lake_A.fastq.gz")
+    make(tmp_path, "lake_B.fastq.gz", reads=0)
+    assert list(detect_samples_files(str(tmp_path))) == ["lake_A"]
 
 
 def test_chunked_files_beside_each_other_are_one_sample(tmp_path):
@@ -70,7 +131,8 @@ def test_plain_fastq_is_found_as_well_as_gzipped(tmp_path):
 
 
 def test_files_that_are_not_reads_are_ignored(tmp_path):
-    make(tmp_path, "notes.txt", "assembly.fasta")
+    (tmp_path / "notes.txt").write_text("x")
+    (tmp_path / "assembly.fasta").write_text(">c\nACGT\n")
     assert detect_samples_files(str(tmp_path)) == {}
 
 
@@ -83,6 +145,6 @@ def test_the_scan_does_not_descend_past_a_run_directory(tmp_path):
 
 def test_every_path_the_scan_reports_can_be_opened(tmp_path):
     """A scan that guessed a path wrong would fail validation, not the scan."""
-    make(tmp_path, "lake_A.fastq.gz")
-    (value,) = detect_samples_files(str(tmp_path)).values()
-    assert os.path.exists(value)
+    make(tmp_path, "lake_A.fastq.gz", "barcode01/x_0.fastq.gz", "barcode01/x_1.fastq.gz")
+    for value in detect_samples_files(str(tmp_path)).values():
+        assert os.path.exists(value)

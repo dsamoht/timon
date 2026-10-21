@@ -222,7 +222,31 @@ DATABASE_BUNDLE = ["kraken_db", "genomes_db"]
 #   one_of_columns    groups of columns of which at least one must be filled on
 #                     each row, for a schema's "anyOf" — a row needing either
 #                     reads to assemble or an assembly already made
-#   param_groups      {group: blurb} for the section headings used by "params"
+#   paired_columns    groups of columns filled all together or not at all, for
+#                     a schema's "dependentRequired" — paired short reads
+#   column_rules      {column: rule}, what one cell accepts, copied from the
+#                     pipeline's own assets/schema_input.json at the pinned
+#                     revision — a sheet timon saved and the pipeline then
+#                     turned away is an error reported hours too late, and
+#                     one timon refused that the pipeline would have taken
+#                     locks the user out. A rule has any of:
+#                       pattern   regex the whole value must match: the schema's
+#                       accepts   what a good value is, said to the user when
+#                                 one is turned away
+#                       path      "file" | "dir" | "any" — the value names one on
+#                                 disk (format file-path / directory-path /
+#                                 path). Never a wildcard or a list: nf-schema
+#                                 refuses a pattern for all three
+#                       name      regex the *files* that count must match. A
+#                                 folder is judged by the files under it,
+#                                 at any depth, which is how a pipeline that
+#                                 takes one gathers its reads
+#                       nonempty  the file — or one under the folder — holds
+#                                 data. An empty FastQ is a sample the run will
+#                                 fail on far from where the mistake was
+#                     A column without one is only checked for being filled,
+#                     and the file_column for existing
+#   param_groups     {group: blurb} for the section headings used by "params"
 #   db_optional_when  {db key: [flags]} — a database under "reference_data"
 #                     that is only read while none of those flags is set: not
 #                     passed, and not missing, for a run that skips its step
@@ -237,6 +261,13 @@ DATABASE_BUNDLE = ["kraken_db", "genomes_db"]
 #                     picker, and refuses a switch to it. For one written down
 #                     before it can be run — the entry stays, so nothing has to
 #                     be reconstructed when it can
+
+# The two cell rules both linked schemas use more than once.
+_NO_SPACES = {"pattern": r"^\S+$", "accepts": "a value with no spaces"}
+_GZ_FASTQ  = {"pattern": r"^\S+\.f(ast)?q\.gz$", "path": "file", "nonempty": True,
+              "accepts": "one gzipped FastQ file (.fastq.gz or .fq.gz), with no spaces "
+                         "in the path"}
+
 PIPELINES = {
     "roshab-cli": {
         "name": "roshab-cli",
@@ -264,6 +295,24 @@ PIPELINES = {
         # Matches assets/schema_input.json at this revision, which requires
         # every one of them — so no "required_columns" here.
         "columns": ["sample_id", "group", "info", "date", "reads"],
+        "column_rules": {
+            "sample_id": {"pattern": r"^[A-Za-z0-9][A-Za-z0-9._-]*$",
+                          "accepts": "a name starting with a letter or digit, then only "
+                                     "letters, digits, hyphens, dots and underscores"},
+            "group":     _NO_SPACES,
+            "info":      _NO_SPACES,
+            # Stricter than the schema's own "^\S+$": the page draws the column
+            # as a date field, which writes nothing else, and a date the
+            # figures cannot order is worth refusing before the run.
+            "date":      {"pattern": r"^\d{4}-\d{2}-\d{2}$", "accepts": "a date as YYYY-MM-DD"},
+            # A file or a folder: bin/concatenate_reads.py takes either, and
+            # gathers *.fastq, *.fq and their .gz forms from a folder by
+            # rglob, so at any depth and by case.
+            "reads":     {"pattern": r"^\S+$", "path": "any", "name": r"\.f(ast)?q(\.gz)?$",
+                          "nonempty": True,
+                          "accepts": "a FastQ file (.fastq or .fq, optionally gzipped) or a "
+                                     "folder holding them, with no spaces in the path"},
+        },
         # The `--db_dir` install route is deliberately absent: setting it runs
         # the database download *instead of* an analysis, which is not what
         # this form builds.
@@ -432,6 +481,20 @@ PIPELINES = {
         "columns": ["sample_id", "group", "assembly_fasta", "long_reads", "short_reads_1", "short_reads_2"],
         "required_columns": ["sample_id", "group"],
         "one_of_columns": [["assembly_fasta", "long_reads"]],
+        "paired_columns": [["short_reads_1", "short_reads_2"]],
+        # Every path is one file, never a folder: a sample sequenced in chunks
+        # has to be concatenated before it can be named here.
+        "column_rules": {
+            "sample_id":      _NO_SPACES,
+            "group":          _NO_SPACES,
+            "assembly_fasta": {"pattern": r"^\S+\.(fa|fasta|fna)(\.gz)?$", "path": "file",
+                               "nonempty": True,
+                               "accepts": "one FASTA file (.fa, .fasta or .fna, optionally "
+                                          "gzipped), with no spaces in the path"},
+            "long_reads":     _GZ_FASTQ,
+            "short_reads_1":  _GZ_FASTQ,
+            "short_reads_2":  _GZ_FASTQ,
+        },
         "param_groups": {
             "read QC":  "Quality control and filtering of long reads.",
             "assembly": "How the long reads are assembled, and — with Flye — polished.",

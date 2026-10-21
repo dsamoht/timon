@@ -14,6 +14,7 @@ import pytest
 from timon.app.model import history
 from timon.app.model import params as P
 from timon.app.model.experiment import selectable_pipelines
+from timon.app.model.files import path_columns
 from timon.app.model.history import RunUnavailable
 from timon.paths import REFERENCE_DATA
 
@@ -45,7 +46,10 @@ def rows(experiment, path, n=1):
     pipe = experiment.pipeline
     out = []
     for i in range(n):
-        row = {column: "x" for column in pipe["columns"]}
+        # A label is any word; a path column other than the reads is one the
+        # pipeline would try to open, so it is left empty.
+        row = {column: "" if column in path_columns(pipe) else "x"
+               for column in pipe["columns"]}
         row["sample_id"] = f"sample_{i}"
         if "date" in row:
             row["date"] = "2026-01-01"

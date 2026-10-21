@@ -299,21 +299,20 @@ def browse_lock_workspace():
 
 @app.route("/browse_pick", methods=["POST"])
 def browse_pick():
-    """Turn the files picked in the browser into one sample-sheet value.
+    """Turn the path picked in the browser into the value its field takes.
 
-    Collapsing several files into a wildcard is done server-side because
-    model.convert_realpaths_to_wildcards is what the folder scan already
-    uses: a second implementation in the page could disagree with it.
+    One path, resolved here rather than in the page: a symlink or a relative
+    crumb becomes the path the save will judge, and it meets the browser's
+    wall on the way.
     """
-    paths = request.form.getlist("paths")
-    if not paths:
+    path = request.form.get("path", "").strip()
+    if not path:
         return jsonify({"ok": False, "error": "nothing selected"}), 400
     try:
-        resolved = [str(model.resolve(p)) for p in paths]
+        resolved = model.resolve(path)
     except model.PermissionRequired as exc:
         return jsonify(presenters.permission_view(exc.path)), 403
-    return jsonify({"ok": True,
-                    "value": model.convert_realpaths_to_wildcards(sorted(resolved))})
+    return jsonify({"ok": True, "value": str(resolved)})
 
 
 # ── results ──────────────────────────────────────────────────────────────────

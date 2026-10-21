@@ -338,8 +338,8 @@
                                                 <div class="cell-path">
                                                     <input name="{{ col }}" value="{{ row[col] }}" required>
                                                     <button type="button" class="pick-btn" onclick="openBrowser(this)"
-                                                            data-pick="files" data-label="{{ col }}"
-                                                            aria-label="browse for {{ col }}" title="browse for a file">
+                                                            data-pick="{{ path_columns[col] }}" data-seq="1" data-label="{{ col }}"
+                                                            aria-label="browse for {{ col }}" title="browse">
                                                         <svg width="12" height="12" viewBox="0 0 16 16" fill="none"
                                                              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
                                                             <path d="M1.5 13V3.5h4l1.5 2h7.5V13z"/>
@@ -515,15 +515,14 @@
 
         <div class="fb-list" id="fb-list"></div>
 
-        <!-- The selection controls belong to the sample sheet, which takes
-             several files at once; a parameter takes one path, and a folder
-             is picked by standing in it. openBrowser() hides what the field
-             being filled has no use for. -->
+        <!-- The sequence filter belongs to the sample sheet, whose columns
+             hold reads; a parameter's path is a database, which it would
+             hide. A folder is picked by standing in it. fbOpen() hides what
+             the field being filled has no use for. -->
         <div class="fb-foot">
             <label class="check-item" id="fb-seq-wrap">
                 <input type="checkbox" id="fb-seq" checked> sequence files only
             </label>
-            <button type="button" class="btn" id="fb-all">select all shown</button>
             <span class="card-sub" id="fb-count">0 selected</span>
             <div class="fb-actions">
                 <button type="button" class="btn" id="fb-cancel">cancel</button>
@@ -686,11 +685,11 @@
         let cells = cols.map(c => {
             const type = c === 'date' ? 'date' : 'text';
             const input = `<input type="${type}" name="${c}" value="${data[c] || ''}" required>`;
-            if (!activePathCols.includes(c)) return `<td>${input}</td>`;
+            if (!(c in activePathCols)) return `<td>${input}</td>`;
             return `<td><div class="cell-path">${input}` +
                    `<button type="button" class="pick-btn" onclick="openBrowser(this)" ` +
-                   `data-pick="files" data-label="${c}" ` +
-                   `aria-label="browse for ${c}" title="browse for a file">${PICK_ICON}</button></div></td>`;
+                   `data-pick="${activePathCols[c]}" data-seq="1" data-label="${c}" ` +
+                   `aria-label="browse for ${c}" title="browse">${PICK_ICON}</button></div></td>`;
         }).join('');
         return `<tr>${cells}<td><button type="button" class="del-btn" onclick="delRow(this)">×</button></td></tr>`;
     }
@@ -1424,25 +1423,24 @@
         input:    null,      // the field being filled
         onPick:   null,      // or, instead of a field, what to do with the folder
         label:    '',
-        mode:     'files',   // what that field takes; see FB_MODES
+        mode:     'file',    // what that field takes; see FB_MODES
+        seq:      false,     // offer the sequence-file filter
         dir:      null,      // the listing on screen
         visible:  [],        // what the filter left of it
         pending:  null,      // path waiting on a permission answer
         selected: new Set(),
     };
 
-    // The same browser fills two kinds of field, and they want different
-    // things of it. A sample-sheet column takes any number of read files,
-    // collapsed into one pattern; a path parameter takes exactly one path,
-    // and what kind of path is declared in config.py ("path": dir/file/any)
-    // and carried here on the button's data-pick.
+    // Every field the browser fills holds one path, and what kind of path is
+    // declared in config.py — a parameter's "path", a sample-sheet column's
+    // column_rules — and carried here on the button's data-pick. Never
+    // several files: no linked pipeline expands a pattern in its sheet.
     const FB_MODES = {
-        files: { title: 'Choose files',           multi: true  },
-        file:  { title: 'Choose a file',          multi: false },
-        dir:   { title: 'Choose a folder',        multi: false },
-        any:   { title: 'Choose a file or folder', multi: false },
+        file: { title: 'Choose a file'           },
+        dir:  { title: 'Choose a folder'         },
+        any:  { title: 'Choose a file or folder' },
     };
-    const fbMode = () => FB_MODES[fb.mode] || FB_MODES.files;
+    const fbMode = () => FB_MODES[fb.mode] || FB_MODES.file;
 
     const fbEl = id => document.getElementById(id);
 
@@ -1461,15 +1459,14 @@
 
     function openBrowser(btn) {
         const input   = btn.closest('.cell-path').querySelector('input');
-        const mode    = btn.dataset.pick || 'files';
+        const mode    = btn.dataset.pick || 'file';
         // Re-picking starts where the field already points rather than back
         // at the root. Whether the value names a folder or a file is not
-        // knowable here, so both are tried: a sample-sheet pattern is never
-        // a folder, so only its parent is.
+        // knowable here, so both are tried.
         const current = input.value.trim();
         const parent  = current ? current.replace(/\/[^\/]*$/, '') : '';
-        fbOpen({ input, mode, label: btn.dataset.label || input.name,
-                 start: FB_MODES[mode]?.multi ? [parent] : [current, parent] });
+        fbOpen({ input, mode, seq: !!btn.dataset.seq, label: btn.dataset.label || input.name,
+                 start: [current, parent] });
     }
 
     // opts: input (a field to fill) or onPick (a folder callback), mode,
@@ -1477,19 +1474,18 @@
     function fbOpen(opts) {
         fb.input  = opts.input || null;
         fb.onPick = opts.onPick || null;
-        fb.mode   = opts.mode || 'files';
+        fb.mode   = opts.mode || 'file';
+        fb.seq    = !!opts.seq;
         fb.label  = opts.label || '';
         fb.selected.clear();
         const mode = fbMode();
 
         fbEl('fb-title').textContent  = mode.title;
         fbEl('fb-target').textContent = '→ ' + fb.label;
-        // The sequence-file filter, and selecting a whole folder's worth at
-        // once, are both about reads. A reference database is a directory or
-        // a tarball, and the filter would hide exactly the thing being
-        // looked for.
-        fbEl('fb-seq-wrap').hidden = !mode.multi;
-        fbEl('fb-all').hidden      = !mode.multi;
+        // The sequence-file filter is about reads. A reference database is a
+        // directory or a tarball, and the filter would hide exactly the
+        // thing being looked for.
+        fbEl('fb-seq-wrap').hidden = !fb.seq;
         fbEl('fb-count').hidden    = fb.mode === 'dir';
         fbEl('fb-use').hidden      = fb.mode === 'dir';
         // A folder is navigated into rather than clicked, so picking the one
@@ -1517,7 +1513,8 @@
         fb.onPick = null;
         fb.pending = null;
         fb.selected.clear();
-        fb.mode = 'files';
+        fb.mode = 'file';
+        fb.seq  = false;
     }
 
     // opts.fallbacks: folders to try in turn if this one cannot be opened,
@@ -1542,9 +1539,8 @@
                 fbEl('fb-perm').hidden = true;
                 fb.pending = null;
                 fb.dir = data;
-                // Selection is per folder: a wildcard only means something
-                // inside one directory, so carrying it across a move would
-                // quietly produce a comma-joined list instead.
+                // Selection is per folder: a file picked and then walked away
+                // from is not what "use" should fill the field with.
                 fb.selected.clear();
                 fbRender();
             })
@@ -1586,7 +1582,7 @@
         fbEl('fb-up').classList.toggle('locked', d.at_root && !d.outside_ok);
 
         const mode = fbMode();
-        const seqOnly = mode.multi && fbEl('fb-seq').checked;
+        const seqOnly = fb.seq && fbEl('fb-seq').checked;
         // Files still show while a folder is being picked — seeing what is in
         // it is half of recognising it — but they are not selectable.
         const pickFiles = fb.mode !== 'dir';
@@ -1619,12 +1615,10 @@
                 } else if (pickFiles) {
                     row.addEventListener('click', () => {
                         const on = fb.selected.has(entry.path);
-                        // Everywhere but the sample sheet the field holds one
-                        // path, so a click moves the selection rather than
-                        // adding to it.
-                        if (!mode.multi) fb.selected.clear();
-                        on ? fb.selected.delete(entry.path)
-                           : fb.selected.add(entry.path);
+                        // The field holds one path, so a click moves the
+                        // selection rather than adding to it.
+                        fb.selected.clear();
+                        if (!on) fb.selected.add(entry.path);
                         fbSync();
                     });
                     // Picking one file is the common case, and asking for a
@@ -1647,14 +1641,12 @@
             row.classList.toggle('sel', fb.selected.has(row.dataset.path)));
     }
 
-    // The server resolves what was picked — one path, or several collapsed
-    // into a pattern — because model.convert_realpaths_to_wildcards is what
-    // the folder scan already uses and a second implementation here could
-    // disagree with it.
-    function fbApply(paths, noun) {
+    // The server resolves what was picked, so a symlink or a relative crumb
+    // fills the field with the path the save will judge.
+    function fbApply(path, noun) {
         const fd = new FormData();
-        paths.forEach(p => fd.append('paths', p));
-        const n = paths.length, label = fb.label, input = fb.input;
+        fd.append('path', path);
+        const label = fb.label, input = fb.input;
         fetch('/browse_pick', { method: 'POST', body: fd })
             .then(r => r.json())
             .then(data => {
@@ -1664,14 +1656,14 @@
                 // follows a change event (see syncParams).
                 input.dispatchEvent(new Event('change', { bubbles: true }));
                 closeBrowser();
-                toast(n === 1 ? `${noun} → ${label}` : `${n} files → ${label} (as one pattern)`);
+                toast(`${noun} → ${label}`);
             })
             .catch(() => toast('could not use that selection', 'err'));
     }
 
     function fbUse() {
         if (!fb.input || !fb.selected.size) return;
-        fbApply([...fb.selected], 'file');
+        fbApply([...fb.selected][0], 'file');
     }
 
     // Picks the folder on screen, which is the one the crumbs name.
@@ -1681,7 +1673,7 @@
         // the scan has answered, so a refusal leaves the user where they were.
         if (fb.onPick) { fb.onPick(fb.dir.path); return; }
         if (!fb.input) return;
-        fbApply([fb.dir.path], 'folder');
+        fbApply(fb.dir.path, 'folder');
     }
 
     fbEl('fb-up').addEventListener('click', () => { if (fb.dir) fbLoad(fb.dir.parent); });
@@ -1695,13 +1687,6 @@
     });
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape' && !fbEl('fb-overlay').hidden) closeBrowser();
-    });
-
-    fbEl('fb-all').addEventListener('click', () => {
-        const files = fb.visible.filter(e => !e.dir);
-        const allOn = files.length && files.every(e => fb.selected.has(e.path));
-        files.forEach(e => allOn ? fb.selected.delete(e.path) : fb.selected.add(e.path));
-        fbSync();
     });
 
     fbEl('fb-perm-allow').addEventListener('click', () => {
